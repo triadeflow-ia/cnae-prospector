@@ -230,24 +230,20 @@ def run_api_server(host='127.0.0.1', port=8000):
                     from flask import send_file
                     return send_file(file_path, as_attachment=True)
                 else:
-                    # Se não encontrar, criar um arquivo de exemplo
-                    from flask import send_file
-                    import tempfile
-                    
-                    # Criar arquivo temporário com dados de exemplo
-                    temp_file = tempfile.NamedTemporaryFile(mode='w', suffix=f'.{filename.split(".")[-1]}', delete=False)
-                    
-                    if filename.endswith('.csv'):
-                        temp_file.write("Nome,Razão Social,CNPJ,Email,Telefone,Endereço,CNAE,Situação\n")
-                        temp_file.write("Restaurante Exemplo,Restaurante Exemplo LTDA,12.345.678/0001-90,contato@restaurante.com.br,(34) 99999-9999,Rua Exemplo 123 - Uberlândia/MG,5611-2/01,Ativo\n")
-                    else:
-                        temp_file.write("Dados de exemplo - arquivo não encontrado no servidor\n")
-                    
-                    temp_file.close()
-                    
-                    return send_file(temp_file.name, as_attachment=True, download_name=filename)
+                    # Se não encontrar o arquivo, retornar erro em vez de dados fictícios
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f"Arquivo não encontrado: {file_path}")
+                    return jsonify({
+                        "error": "Arquivo não encontrado. A busca pode não ter retornado resultados ou houve erro na geração do arquivo.",
+                        "filename": filename,
+                        "file_path": file_path
+                    }), 404
                     
             except Exception as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.error(f"Erro ao baixar arquivo: {e}")
                 return jsonify({"error": f"Erro ao baixar arquivo: {str(e)}"}), 500
         
         print(f"🚀 Servidor API iniciado em http://{host}:{port}")
