@@ -1,0 +1,40 @@
+# ===== CORE DEPENDENCIES =====
+# Environment and configuration
+python-dotenv==1.0.0
+
+# HTTP requests and APIs
+requests==2.31.0
+tenacity==8.2.3
+
+# Data processing
+pandas==2.1.4
+
+# ===== GOOGLE SHEETS INTEGRATION =====
+gspread==6.2.1
+google-auth==2.25.2
+google-auth-oauthlib==1.2.0
+
+# ===== FILE PROCESSING =====
+# Excel files
+openpyxl==3.1.2
+
+# YAML configuration
+pyyaml==6.0.1
+
+# ===== UTILITIES =====
+# Logging
+loguru==0.7.2
+
+# Progress bars
+tqdm==4.66.1
+
+# Terminal colors
+colorama==0.4.6
+
+# Data validation
+pydantic==2.5.3
+
+# ===== WEB API =====
+# Flask web framework
+flask==3.0.0
+flask-cors==4.0.0

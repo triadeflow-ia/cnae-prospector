@@ -1,0 +1,1073 @@
+# CNAE Prospector Engine
+# Web scraping tool for Brazilian companies data
+
+# Create project structure
+src/
+├── config/
+│   ├── __init__.py
+│   ├── settings.py
+│   └── constants.py
+├── services/
+│   ├── __init__.py
+│   └── empresas_brasil.py
+├── models/
+│   ├── __init__.py
+│   └── empresa.py
+├── exporters/
+│   ├── __init__.py
+│   ├── base_exporter.py
+│   ├── csv_exporter.py
+│   └── sheets_exporter.py
+├── utils/
+│   ├── __init__.py
+│   └── logger.py
+└── main.py
+
+# requirements.txt
+python-dotenv==1.0.0
+requests==2.31.0
+pandas==2.1.4
+gspread==5.12.4
+google-auth==2.25.2
+pyyaml==6.0.1
+colorama==0.4.6
+tqdm==4.66.1
+tenacity==8.2.3
+pydantic==2.5.2
+loguru==0.7.2
+openpyxl==3.1.2
+
+# .env.example
+RAPIDAPI_KEY=your_rapidapi_key_here
+GOOGLE_SHEETS_CREDENTIALS_PATH=path/to/your/credentials.json
+GOOGLE_SHEETS_ID=your_google_sheets_id_here
+LOG_LEVEL=INFO
+CACHE_ENABLED=true
+CACHE_TTL=3600
+RATE_LIMIT_REQUESTS=10
+RATE_LIMIT_PERIOD=1
+
+# .gitignore
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.idea/
+.vscode/
+*.log
+*.xlsx
+*.csv
+cache/
+credentials.json
+.DS_Store
+
+# src/config/__init__.py
+"""Configuration package for CNAE Prospector Engine."""
+
+# src/config/settings.py
+"""Application settings and configuration."""
+
+import os
+from pathlib import Path
+from typing import Optional
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
+# Base paths
+BASE_DIR = Path(__file__).parent.parent.parent
+CACHE_DIR = BASE_DIR / "cache"
+LOGS_DIR = BASE_DIR / "logs"
+EXPORTS_DIR = BASE_DIR / "exports"
+
+# Create directories if they don't exist
+for directory in [CACHE_DIR, LOGS_DIR, EXPORTS_DIR]:
+    directory.mkdir(exist_ok=True)
+
+# API Configuration
+RAPIDAPI_KEY: str = os.getenv("RAPIDAPI_KEY", "")
+RAPIDAPI_HOST: str = "empresas-brasil.p.rapidapi.com"
+BASE_URL: str = f"https://{RAPIDAPI_HOST}"
+
+# Google Sheets Configuration
+GOOGLE_SHEETS_CREDENTIALS_PATH: Optional[str] = os.getenv("GOOGLE_SHEETS_CREDENTIALS_PATH")
+GOOGLE_SHEETS_ID: Optional[str] = os.getenv("GOOGLE_SHEETS_ID")
+
+# Cache Configuration
+CACHE_ENABLED: bool = os.getenv("CACHE_ENABLED", "true").lower() == "true"
+CACHE_TTL: int = int(os.getenv("CACHE_TTL", "3600"))
+
+# Rate Limiting
+RATE_LIMIT_REQUESTS: int = int(os.getenv("RATE_LIMIT_REQUESTS", "10"))
+RATE_LIMIT_PERIOD: int = int(os.getenv("RATE_LIMIT_PERIOD", "1"))
+
+# Logging
+LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO")
+
+# Request Configuration
+REQUEST_TIMEOUT: int = 30
+MAX_RETRIES: int = 3
+BACKOFF_FACTOR: float = 0.3
+
+# src/config/constants.py
+"""Constants and CNAE codes for the application."""
+
+from typing import Dict, List
+
+# Predefined CNAE groups
+CNAE_GROUPS: Dict[str, List[str]] = {
+    "BARES_RESTAURANTES": [
+        "5611-2/01",  # Restaurantes e similares
+        "5611-2/02",  # Bares e outros estabelecimentos especializados em servir bebidas
+        "5611-2/03",  # Lanchonetes, casas de chá, de sucos e similares
+        "5612-1/00",  # Serviços ambulantes de alimentação
+    ],
+    "TECNOLOGIA": [
+        "6201-5/00",  # Desenvolvimento de programas de computador sob encomenda
+        "6202-3/00",  # Desenvolvimento e licenciamento de programas de computador customizáveis
+        "6203-1/00",  # Desenvolvimento e licenciamento de programas de computador não customizáveis
+        "6204-0/00",  # Consultoria em tecnologia da informação
+        "6311-9/00",  # Tratamento de dados, provedores de serviços de aplicação e serviços de hospedagem na internet
+    ],
+    "BELEZA_ESTETICA": [
+        "9602-5/01",  # Cabeleireiros, manicure e pedicure
+        "9602-5/02",  # Atividades de estética e outros serviços de cuidados com a beleza
+        "4772-5/00",  # Comércio varejista de cosméticos, produtos de perfumaria e de higiene pessoal
+    ],
+    "SAUDE": [
+        "8630-5/01",  # Atividade médica ambulatorial com recursos para realização de procedimentos cirúrgicos
+        "8630-5/02",  # Atividade médica ambulatorial com recursos para realização de exames complementares
+        "8630-5/03",  # Atividade médica ambulatorial restrita a consultas
+        "8640-2/01",  # Atividade odontológica
+        "8650-0/01",  # Atividades de enfermagem
+        "8650-0/02",  # Atividades de profissionais da nutrição
+        "8650-0/03",  # Atividade de psicologia e psicanálise
+    ],
+    "EDUCACAO": [
+        "8511-2/00",  # Educação infantil - creche
+        "8512-1/00",  # Educação infantil - pré-escola
+        "8513-9/00",  # Ensino fundamental
+        "8520-1/00",  # Ensino médio
+        "8531-7/00",  # Educação superior - graduação
+        "8532-5/00",  # Educação superior - graduação e pós-graduação
+        "8541-4/00",  # Educação profissional de nível técnico
+        "8592-9/01",  # Ensino de idiomas
+        "8593-7/00",  # Ensino de música
+    ],
+}
+
+# Complete CNAE database with descriptions
+CNAE_DATABASE: Dict[str, str] = {
+    # Agricultura, pecuária, produção florestal, pesca e aquicultura
+    "0111-3/01": "Cultivo de cereais",
+    "0111-3/02": "Cultivo de algodão herbáceo e de outras fibras de lavoura temporária",
+    "0112-1/01": "Cultivo de arroz",
+    "0112-1/02": "Cultivo de milho",
+    "0113-0/01": "Cultivo de cana-de-açúcar",
+    "0114-8/01": "Cultivo de fumo",
+    "0115-6/01": "Cultivo de soja",
+    "0116-4/01": "Cultivo de oleaginosas de lavoura temporária, exceto soja",
+    "0119-9/01": "Cultivo de plantas de lavoura temporária não especificadas anteriormente",
+    
+    # Indústrias extrativas
+    "0510-8/01": "Extração de carvão mineral",
+    "0600-7/01": "Extração de petróleo e gás natural",
+    "0700-3/01": "Extração de minerais metálicos",
+    "0800-0/01": "Extração de minerais não-metálicos",
+    "0990-4/01": "Atividades de apoio à extração de minerais",
+    
+    # Indústrias de transformação
+    "1011-2/01": "Frigorífico - abate de bovinos",
+    "1011-2/02": "Frigorífico - abate de equinos",
+    "1012-1/01": "Frigorífico - abate de suínos, aves e outros pequenos animais",
+    "1013-9/01": "Fabricação de produtos de carne",
+    "1020-1/01": "Preservação do pescado e fabricação de produtos do pescado",
+    "1031-7/00": "Fabricação de conservas de frutas",
+    "1032-5/01": "Fabricação de conservas de legumes e outros vegetais",
+    "1033-3/01": "Fabricação de sucos de frutas, hortaliças e legumes",
+    "1041-4/00": "Fabricação de óleos vegetais em bruto",
+    "1042-2/00": "Fabricação de óleos vegetais refinados",
+    "1043-1/01": "Fabricação de margarina e outras gorduras vegetais e de óleos não comestíveis de animais",
+    "1051-1/00": "Preparação do leite",
+    "1052-0/01": "Fabricação de produtos do laticínio",
+    "1053-8/00": "Fabricação de sorvetes e outros gelados comestíveis",
+    "1061-9/01": "Beneficiamento de arroz e fabricação de produtos do arroz",
+    "1062-7/01": "Moagem de trigo e fabricação de derivados",
+    "1063-5/00": "Fabricação de farinha de mandioca e derivados",
+    "1064-3/01": "Fabricação de farinha de milho e derivados",
+    "1065-1/00": "Fabricação de amidos e féculas de vegetais",
+    "1066-0/00": "Fabricação de alimentos para animais",
+    "1069-4/00": "Moagem e fabricação de produtos de origem vegetal não especificados anteriormente",
+    "1071-6/00": "Fabricação de açúcar em bruto",
+    "1072-4/01": "Fabricação de açúcar de cana refinado",
+    "1072-4/02": "Fabricação de açúcar de cereais (dextrose) e de beterraba",
+    "1081-3/01": "Fabricação de produtos de padaria, confeitaria e pastelaria",
+    "1082-1/00": "Fabricação de biscoitos e bolachas",
+    "1091-1/01": "Fabricação de produtos para a alimentação infantil",
+    "1092-9/00": "Fabricação de especiarias, molhos, temperos e condimentos",
+    "1093-7/01": "Fabricação de alimentos dietéticos e complementos alimentares",
+    "1094-5/00": "Fabricação de alimentos e pratos prontos",
+    "1095-3/01": "Fabricação de balas, caramelos e gomas de mascar",
+    "1096-1/00": "Fabricação de produtos de cacau, chocolates e confeitos",
+    "1099-6/01": "Fabricação de produtos alimentícios não especificados anteriormente",
+    
+    # Bebidas
+    "1111-9/01": "Fabricação de aguardentes e outras bebidas destiladas",
+    "1112-7/01": "Fabricação de vinho",
+    "1113-5/01": "Fabricação de malte, cerveja e chope",
+    "1121-6/01": "Fabricação de águas envasadas",
+    "1122-4/01": "Fabricação de refrigerantes e de outras bebidas não alcoólicas",
+    
+    # Produtos do fumo
+    "1220-4/01": "Fabricação de cigarros",
+    "1220-4/02": "Fabricação de cigarrilhas e charutos",
+    "1220-4/03": "Fabricação de filtros para cigarros",
+    "1220-4/99": "Fabricação de outros produtos do fumo",
+    
+    # Produtos têxteis
+    "1311-1/00": "Preparação e fiação de fibras de algodão",
+    "1312-0/00": "Preparação e fiação de fibras têxteis naturais, exceto algodão",
+    "1313-8/00": "Fiação de fibras artificiais e sintéticas",
+    "1321-9/00": "Tecelagem de fios de algodão",
+    "1322-7/00": "Tecelagem de fios de fibras têxteis naturais, exceto algodão",
+    "1323-5/00": "Tecelagem de fios de fibras artificiais e sintéticas",
+    "1330-8/01": "Fabricação de tecidos de malha",
+    "1340-5/01": "Acabamento de fios, tecidos e artigos têxteis terceirizados",
+    "1351-1/00": "Fabricação de artefatos têxteis para uso doméstico",
+    "1359-6/00": "Fabricação de outros produtos têxteis não especificados anteriormente",
+    
+    # Confecção de artigos do vestuário e acessórios
+    "1411-8/01": "Confecção de roupas íntimas",
+    "1412-6/01": "Confecção de peças do vestuário, exceto roupas íntimas",
+    "1413-4/01": "Confecção de roupas profissionais",
+    "1414-2/01": "Fabricação de acessórios do vestuário, exceto para segurança e proteção",
+    "1421-5/01": "Fabricação de meias",
+    "1422-3/01": "Fabricação de artigos do vestuário, produzidos em malharias e tricotagens, exceto meias",
+    
+    # Preparação de couros e fabricação de artefatos de couro, artigos para viagem e calçados
+    "1510-6/01": "Curtimento e outras preparações de couro",
+    "1521-1/01": "Fabricação de artigos para viagem e de artefatos diversos de couro",
+    "1531-9/01": "Fabricação de calçados de couro",
+    "1532-7/01": "Fabricação de tênis de qualquer material",
+    "1533-5/01": "Fabricação de calçados de material sintético",
+    "1539-4/01": "Fabricação de calçados de materiais não especificados anteriormente",
+    "1540-8/01": "Fabricação de partes para calçados, de qualquer material",
+    
+    # Fabricação de produtos de madeira
+    "1610-2/01": "Serrarias e fabricação de madeira laminada e de madeira compensada",
+    "1621-8/01": "Fabricação de madeira laminada e de chapas de madeira compensada, prensada e aglomerada",
+    "1622-6/01": "Fabricação de casas de madeira pré-fabricadas",
+    "1623-4/01": "Fabricação de artefatos de tanoaria e de embalagens de madeira",
+    "1629-3/01": "Fabricação de artefatos de madeira, palha, cortiça, vime e material trançado não especificados anteriormente",
+    
+    # Fabricação de celulose, papel e produtos de papel
+    "1710-9/00": "Fabricação de celulose e outras pastas para a fabricação de papel",
+    "1721-4/00": "Fabricação de papel",
+    "1722-2/00": "Fabricação de cartolina e papel-cartão",
+    "1731-1/01": "Fabricação de embalagens de papel",
+    "1732-0/01": "Fabricação de embalagens de cartolina e papel-cartão",
+    "1733-8/00": "Fabricação de chapas e de embalagens de papelão ondulado",
+    "1741-9/01": "Fabricação de produtos de papel para uso doméstico e higiênico-sanitário",
+    "1742-7/01": "Fabricação de produtos de papel para usos diversos",
+    
+    # Impressão e reprodução de gravações
+    "1811-3/01": "Impressão de jornais",
+    "1812-1/01": "Impressão de livros, revistas e outras publicações periódicas",
+    "1813-0/01": "Impressão de material para outros usos",
+    "1821-1/00": "Serviços de pré-impressão",
+    "1822-9/01": "Serviços de acabamentos gráficos",
+    "1830-0/01": "Reprodução de som em qualquer suporte",
+    "1830-0/02": "Reprodução de vídeo em qualquer suporte",
+    "1830-0/03": "Reprodução de software em qualquer suporte",
+    
+    # Fabricação de coque, de produtos derivados do petróleo e de biocombustíveis
+    "1910-1/01": "Coquerias",
+    "1921-7/00": "Fabricação de produtos do refino de petróleo",
+    "1922-5/01": "Fabricação de produtos derivados do petróleo",
+    "1931-4/00": "Fabricação de álcool",
+    "1932-2/00": "Fabricação de biocombustíveis, exceto álcool",
+    
+    # Fabricação de produtos químicos
+    "2011-8/01": "Fabricação de cloro e álcalis",
+    "2012-6/01": "Fabricação de intermediários para fertilizantes",
+    "2013-4/01": "Fabricação de adubos e fertilizantes",
+    "2014-2/01": "Fabricação de gases industriais",
+    "2019-3/01": "Fabricação de produtos químicos inorgânicos não especificados anteriormente",
+    "2021-5/01": "Fabricação de produtos petroquímicos básicos",
+    "2022-3/01": "Fabricação de intermediários para plastificantes, resinas e fibras",
+    "2029-1/01": "Fabricação de produtos químicos orgânicos não especificados anteriormente",
+    "2031-2/01": "Fabricação de resinas termoplásticas",
+    "2032-1/01": "Fabricação de resinas termofixas",
+    "2033-9/01": "Fabricação de elastômeros",
+    "2040-1/01": "Fabricação de fibras artificiais e sintéticas",
+    "2051-7/00": "Fabricação de defensivos agrícolas",
+    "2052-5/01": "Fabricação de desinfestantes domissanitários",
+    "2061-4/01": "Fabricação de sabões e detergentes sintéticos",
+    "2062-2/01": "Fabricação de produtos de limpeza e polimento",
+    "2063-1/01": "Fabricação de cosméticos, produtos de perfumaria e de higiene pessoal",
+    "2071-1/00": "Fabricação de tintas, vernizes, esmaltes e lacas",
+    "2072-0/00": "Fabricação de tintas de impressão",
+    "2073-8/00": "Fabricação de impermeabilizantes, solventes e produtos afins",
+    "2091-6/01": "Fabricação de adesivos e selantes",
+    "2092-4/01": "Fabricação de explosivos",
+    "2093-2/00": "Fabricação de aditivos de uso industrial",
+    "2094-1/00": "Fabricação de catalisadores",
+    "2099-1/01": "Fabricação de produtos químicos não especificados anteriormente",
+    
+    # Fabricação de produtos farmoquímicos e farmacêuticos
+    "2110-6/00": "Fabricação de produtos farmoquímicos",
+    "2121-1/01": "Fabricação de medicamentos para uso humano",
+    "2122-0/01": "Fabricação de medicamentos para uso veterinário",
+    "2123-8/00": "Fabricação de preparações farmacêuticas",
+    
+    # Fabricação de produtos de borracha e de material plástico
+    "2211-1/00": "Fabricação de pneumáticos e de câmaras-de-ar",
+    "2212-9/01": "Reforma de pneumáticos usados",
+    "2219-6/00": "Fabricação de outros produtos de borracha",
+    "2221-8/00": "Fabricação de laminados planos e tubulares de material plástico",
+    "2222-6/00": "Fabricação de embalagens de material plástico",
+    "2223-4/00": "Fabricação de tubos e acessórios de material plástico para uso na construção",
+    "2229-3/01": "Fabricação de artefatos de material plástico não especificados anteriormente",
+    
+    # Fabricação de produtos de minerais não-metálicos
+    "2311-7/00": "Fabricação de vidro plano e de segurança",
+    "2312-5/00": "Fabricação de embalagens de vidro",
+    "2319-2/01": "Fabricação de artigos de vidro",
+    "2320-6/01": "Fabricação de cimento",
+    "2330-3/01": "Fabricação de artefatos de concreto, cimento, fibrocimento, gesso e materiais semelhantes",
+    "2341-9/01": "Fabricação de produtos cerâmicos refratários",
+    "2342-7/01": "Fabricação de produtos cerâmicos não-refratários para uso estrutural na construção",
+    "2349-4/01": "Fabricação de produtos cerâmicos não-refratários não especificados anteriormente",
+    "2391-5/01": "Britamento de pedras, exceto associado à extração",
+    "2392-3/01": "Fabricação de cal e gesso",
+    "2399-1/01": "Fabricação de produtos de minerais não-metálicos não especificados anteriormente",
+    
+    # Metalurgia
+    "2411-3/01": "Produção de ferro-gusa",
+    "2412-1/01": "Produção de ferro e aço",
+    "2413-0/01": "Produção de ferroligas",
+    "2421-1/01": "Produção de alumínio e suas ligas",
+    "2422-9/01": "Produção de cobre",
+    "2423-7/01": "Produção de outros metais não-ferrosos e suas ligas",
+    "2431-8/01": "Produção de ferro fundido",
+    "2432-6/01": "Produção de aço em formas primárias e semi-acabados",
+    "2441-5/01": "Produção de tubos de ferro fundido e aço",
+    "2442-3/01": "Produção de laminados planos de aço ao carbono",
+    "2443-1/01": "Produção de laminados planos de aços especiais",
+    "2449-1/01": "Produção de outros laminados de aço",
+    "2451-2/01": "Produção de relaminados, trefilados e perfilados de aço",
+    "2452-1/01": "Produção de arames de aço",
+    "2461-1/01": "Produção de laminados de alumínio",
+    "2462-9/01": "Produção de artefatos estampados de metal",
+    "2463-7/01": "Produção de fios e cabos metálicos não-elétricos",
+    "2469-6/01": "Produção de outros produtos metalúrgicos não-ferrosos",
+    
+    # Fabricação de produtos de metal, exceto máquinas e equipamentos
+    "2511-0/01": "Fabricação de estruturas metálicas",
+    "2512-8/01": "Fabricação de esquadrias de metal",
+    "2513-6/01": "Fabricação de obras de caldeiraria pesada",
+    "2521-7/01": "Fabricação de tanques, reservatórios metálicos e caldeiras para aquecimento central",
+    "2522-5/01": "Fabricação de caldeiras geradoras de vapor",
+    "2531-4/01": "Produção de forjados de aço e de metais não-ferrosos e suas ligas",
+    "2532-2/01": "Produção de artefatos estampados de metal e metalurgia do pó",
+    "2539-0/01": "Serviços de usinagem, tornearia e solda",
+    "2541-1/01": "Fabricação de cutlaria",
+    "2542-0/01": "Fabricação de ferramentas",
+    "2543-8/01": "Fabricação de fechaduras e ferragens",
+    "2544-6/01": "Fabricação de equipamentos de proteção e segurança",
+    "2549-7/01": "Fabricação de produtos de metal não especificados anteriormente",
+    
+    # Fabricação de equipamentos de informática, produtos eletrônicos e ópticos
+    "2610-8/00": "Fabricação de componentes eletrônicos",
+    "2621-3/01": "Fabricação de equipamentos de informática",
+    "2622-1/01": "Fabricação de periféricos para equipamentos de informática",
+    "2631-1/01": "Fabricação de equipamentos transmissores de comunicação",
+    "2632-9/01": "Fabricação de aparelhos telefônicos e de outros equipamentos de comunicação",
+    "2640-0/01": "Fabricação de aparelhos de recepção, reprodução, gravação e amplificação de áudio e vídeo",
+    "2651-5/01": "Fabricação de aparelhos e equipamentos de medida, teste e controle",
+    "2652-3/01": "Fabricação de cronômetros e relógios",
+    "2660-4/01": "Fabricação de aparelhos eletromédicos e eletroterapêuticos e equipamentos de irradiação",
+    "2670-1/01": "Fabricação de equipamentos e instrumentos ópticos, fotográficos e cinematográficos",
+    "2680-9/01": "Fabricação de mídias virgens, magnéticas e ópticas",
+    
+    # Fabricação de máquinas, aparelhos e materiais elétricos
+    "2710-4/01": "Fabricação de geradores, transformadores e motores elétricos",
+    "2721-0/01": "Fabricação de pilhas, baterias e acumuladores elétricos",
+    "2722-8/01": "Fabricação de equipamentos para distribuição e controle de energia elétrica",
+    "2731-7/01": "Fabricação de fios, cabos e condutores elétricos isolados",
+    "2732-5/01": "Fabricação de material elétrico para instalações em circuito de consumo",
+    "2733-3/01": "Fabricação de material elétrico para instalações em circuito de consumo",
+    "2740-6/01": "Fabricação de lâmpadas e outros equipamentos de iluminação",
+    "2751-1/01": "Fabricação de fogões, refrigeradores e máquinas de lavar e secar para uso doméstico",
+    "2759-7/01": "Fabricação de aparelhos eletrodomésticos não especificados anteriormente",
+    
+    # Fabricação de máquinas e equipamentos
+    "2811-9/01": "Fabricação de motores e turbinas, exceto para aviões e veículos rodoviários",
+    "2812-7/01": "Fabricação de equipamentos hidráulicos e pneumáticos",
+    "2813-5/01": "Fabricação de válvulas, registros e dispositivos similares",
+    "2814-3/01": "Fabricação de compressores",
+    "2815-1/01": "Fabricação de equipamentos de transmissão para fins industriais",
+    "2821-6/01": "Fabricação de fornos industriais, aparelhos e equipamentos não-elétricos para instalações térmicas",
+    "2822-4/01": "Fabricação de máquinas, equipamentos e aparelhos para transporte e elevação de cargas",
+    "2823-2/01": "Fabricação de máquinas e aparelhos de refrigeração e ventilação para uso industrial e comercial",
+    "2829-1/01": "Fabricação de máquinas e equipamentos de uso geral não especificados anteriormente",
+    "2831-3/01": "Fabricação de tratores agrícolas",
+    "2832-1/01": "Fabricação de equipamentos para irrigação agrícola",
+    "2833-0/01": "Fabricação de máquinas e equipamentos para a agricultura e pecuária, exceto para irrigação",
+    "2840-2/01": "Fabricação de máquinas-ferramenta",
+    "2851-8/01": "Fabricação de máquinas e equipamentos para a prospecção e extração de petróleo",
+    "2852-6/01": "Fabricação de outras máquinas e equipamentos para uso na extração mineral, exceto na extração de petróleo",
+    "2853-4/01": "Fabricação de máquinas e equipamentos para as indústrias de alimentos, bebidas e fumo",
+    "2854-2/01": "Fabricação de máquinas e equipamentos para a indústria têxtil",
+    "2855-1/01": "Fabricação de máquinas e equipamentos para as indústrias do vestuário, do couro e de calçados",
+    "2856-9/01": "Fabricação de máquinas para a indústria de celulose, papel e papelão",
+    "2857-7/01": "Fabricação de máquinas e equipamentos para a indústria do plástico",
+    "2858-5/01": "Fabricação de máquinas e equipamentos para as indústrias diversas",
+    "2861-5/01": "Fabricação de máquinas para escritório",
+    "2862-3/01": "Fabricação de máquinas, equipamentos e aparelhos para uso odonto-médico-hospitalar",
+    "2863-1/01": "Fabricação de máquinas e equipamentos para uso industrial específico não especificados anteriormente",
+    
+    # Fabricação de veículos automotores, reboques e carrocerias
+    "2910-7/01": "Fabricação de automóveis, camionetas e utilitários",
+    "2920-4/01": "Fabricação de caminhões e ônibus",
+    "2930-1/01": "Fabricação de cabines, carrocerias e reboques",
+    "2941-7/01": "Fabricação de peças e acessórios para o sistema motor de veículos automotores",
+    "2942-5/01": "Fabricação de peças e acessórios para os sistemas de marcha e transmissão de veículos automotores",
+    "2943-3/01": "Fabricação de peças e acessórios para o sistema de freios de veículos automotores",
+    "2944-1/01": "Fabricação de peças e acessórios para o sistema de direção e suspensão de veículos automotores",
+    "2945-0/01": "Fabricação de material elétrico e eletrônico para veículos automotores",
+    "2949-2/01": "Fabricação de peças e acessórios para veículos automotores não especificados anteriormente",
+    
+    # Fabricação de outros equipamentos de transporte
+    "3011-3/01": "Construção de embarcações e estruturas flutuantes",
+    "3012-1/01": "Construção de embarcações para esporte e lazer",
+    "3031-8/01": "Fabricação de locomotivas, vagões e outros materiais rodantes",
+    "3032-6/01": "Fabricação de peças e acessórios para veículos ferroviários",
+    "3041-5/01": "Fabricação de aeronaves",
+    "3042-3/01": "Fabricação de turbinas, motores e outros componentes e peças para aeronaves",
+    "3050-4/01": "Fabricação de veículos militares de combate",
+    "3091-1/01": "Fabricação de motocicletas",
+    "3092-0/01": "Fabricação de bicicletas e triciclos não-motorizados",
+    "3099-7/01": "Fabricação de equipamentos de transporte não especificados anteriormente",
+    
+    # Fabricação de móveis
+    "3101-2/01": "Fabricação de móveis com predominância de madeira",
+    "3102-1/01": "Fabricação de móveis com predominância de metal",
+    "3103-9/01": "Fabricação de móveis de outros materiais, exceto madeira e metal",
+    "3104-7/01": "Fabricação de colchões",
+    
+    # Fabricação de produtos diversos
+    "3211-6/01": "Lapidação de gemas e fabricação de artefatos de ourivesaria e joalheria",
+    "3212-4/01": "Fabricação de bijuterias e artefatos semelhantes",
+    "3220-5/01": "Fabricação de instrumentos musicais",
+    "3230-2/01": "Fabricação de artefatos para pesca e esporte",
+    "3240-0/01": "Fabricação de brinquedos e jogos recreativos",
+    "3250-7/01": "Fabricação de instrumentos e materiais para uso médico e odontológico e de artigos ópticos",
+    "3291-4/01": "Fabricação de escovas, pincéis e vassouras",
+    "3292-2/01": "Fabricação de equipamentos e acessórios para segurança e proteção pessoal e profissional",
+    "3299-0/01": "Fabricação de produtos diversos não especificados anteriormente",
+    
+    # Manutenção, reparação e instalação de máquinas e equipamentos
+    "3311-2/01": "Manutenção e reparação de tanques, reservatórios metálicos e caldeiras",
+    "3312-1/01": "Manutenção e reparação de equipamentos eletrônicos e ópticos",
+    "3313-9/01": "Manutenção e reparação de máquinas e equipamentos elétricos",
+    "3314-7/01": "Manutenção e reparação de máquinas e equipamentos da indústria mecânica",
+    "3315-5/01": "Manutenção e reparação de veículos ferroviários",
+    "3316-3/01": "Manutenção e reparação de aeronaves",
+    "3317-1/01": "Manutenção e reparação de embarcações",
+    "3319-8/01": "Manutenção e reparação de equipamentos e produtos não especificados anteriormente",
+    "3321-0/01": "Instalação de máquinas e equipamentos industriais",
+    "3329-5/01": "Instalação de equipamentos não especificados anteriormente",
+    
+    # Eletricidade, gás e outras utilidades
+    "3511-5/01": "Geração de energia elétrica",
+    "3512-3/01": "Transmissão de energia elétrica",
+    "3513-1/01": "Comércio atacadista de energia elétrica",
+    "3514-0/01": "Distribuição de energia elétrica",
+    "3520-4/01": "Produção de gás; processamento de gás natural; distribuição de combustíveis gasosos por redes urbanas",
+    "3530-1/01": "Produção e distribuição de vapor, água quente e ar condicionado",
+    "3600-6/01": "Captação, tratamento e distribuição de água",
+    "3701-4/00": "Gestão de redes de esgoto",
+    "3702-2/00": "Atividades relacionadas a esgoto, exceto a gestão de redes",
+    "3811-4/00": "Coleta de resíduos não-perigosos",
+    "3812-2/00": "Coleta de resíduos perigosos",
+    "3821-1/00": "Tratamento e disposição de resíduos não-perigosos",
+    "3822-0/00": "Tratamento e disposição de resíduos perigosos",
+    "3831-9/00": "Recuperação de materiais metálicos",
+    "3832-7/00": "Recuperação de materiais plásticos",
+    "3839-4/00": "Recuperação de materiais não especificados anteriormente",
+    "3900-5/00": "Descontaminação e outros serviços de gestão de resíduos",
+    
+    # Construção
+    "4110-7/00": "Desenvolvimento de projetos imobiliários",
+    "4120-4/01": "Construção de edifícios",
+    "4211-1/01": "Construção de rodovias e ferrovias",
+    "4212-0/01": "Construção de obras-de-arte especiais",
+    "4213-8/00": "Obras de urbanização - arruamento e subdivisão de terrenos",
+    "4221-9/01": "Construção de barragens e represas para geração de energia elétrica",
+    "4222-7/01": "Construção de estações e redes de distribuição de energia elétrica",
+    "4223-5/99": "Construção de outras obras de infraestrutura elétrica e de telecomunicações",
+    "4291-0/01": "Obras portuárias, marítimas e fluviais",
+    "4292-8/01": "Montagem de instalações industriais e de estruturas metálicas",
+    "4299-5/01": "Construção de outras obras de engenharia civil não especificadas anteriormente",
+    "4311-8/01": "Demolição e preparação de canteiro de obras",
+    "4312-6/00": "Perfurações e sondagens",
+    "4313-4/00": "Obras de terraplenagem",
+    "4319-3/01": "Serviços de preparação do terreno não especificados anteriormente",
+    "4321-5/01": "Instalação e manutenção elétrica",
+    "4322-3/01": "Instalações hidráulicas, sanitárias e de gás",
+    "4329-1/01": "Obras de instalações em construções não especificadas anteriormente",
+    "4330-4/01": "Obras de acabamento",
+    "4391-6/00": "Obras de fundações",
+    "4399-1/01": "Serviços especializados para construção não especificados anteriormente",
+    
+    # Comércio e reparação de veículos automotores e motocicletas
+    "4511-1/01": "Comércio a varejo de automóveis, camionetas e utilitários novos",
+    "4511-1/02": "Comércio a varejo de automóveis, camionetas e utilitários usados",
+    "4512-9/01": "Representantes comerciais e agentes do comércio de veículos automotores",
+    "4520-0/01": "Comércio por atacado de peças e acessórios novos para veículos automotores",
+    "4520-0/02": "Comércio por atacado de pneumáticos e câmaras-de-ar",
+    "4530-7/01": "Comércio a varejo de peças e acessórios novos para veículos automotores",
+    "4530-7/02": "Comércio a varejo de peças e acessórios usados para veículos automotores",
+    "4530-7/03": "Comércio a varejo de pneumáticos e câmaras-de-ar",
+    "4541-2/01": "Comércio por atacado de motocicletas e motonetas",
+    "4541-2/02": "Comércio por atacado de peças e acessórios para motocicletas e motonetas",
+    "4542-1/01": "Comércio a varejo de motocicletas e motonetas novas",
+    "4542-1/02": "Comércio a varejo de motocicletas e motonetas usadas",
+    "4543-9/01": "Comércio a varejo de peças e acessórios para motocicletas e motonetas",
+    "4520-0/03": "Comércio por atacado de veículos automotores",
+    "4511-1/03": "Comércio por atacado de automóveis, camionetas e utilitários novos e usados",
+    "4511-1/04": "Comércio por atacado de caminhões novos e usados",
+    "4511-1/05": "Comércio por atacado de reboques e semi-reboques novos e usados",
+    "4511-1/06": "Comércio por atacado de ônibus e microônibus novos e usados",
+    "4520-0/04": "Comércio a varejo de caminhões novos e usados",
+    "4520-0/05": "Comércio a varejo de reboques e semi-reboques novos e usados",
+    "4520-0/06": "Comércio a varejo de ônibus e microônibus novos e usados",
+    "4530-7/04": "Recondicionamento de motores para veículos automotores",
+    
+    # Manutenção e reparação de veículos automotores
+    "4520-0/07": "Representantes comerciais e agentes do comércio de peças e acessórios novos e usados para veículos automotores",
+    "4530-7/05": "Comércio sob consignação de veículos automotores",
+    "4543-9/02": "Comércio sob consignação de motocicletas e motonetas",
+    "4520-0/08": "Comércio atacadista de peças e acessórios novos para veículos automotores",
+    "4530-7/06": "Comércio varejista de peças e acessórios novos para veículos automotores",
+    "4530-7/07": "Comércio varejista de peças e acessórios usados para veículos automotores",
+    "4543-9/03": "Comércio varejista de peças e acessórios novos para motocicletas e motonetas",
+    "4543-9/04": "Comércio varejista de peças e acessórios usados para motocicletas e motonetas",
+    
+    # Serviços de manutenção e reparação de veículos automotores
+    "4520-0/09": "Serviços de manutenção e reparação mecânica de veículos automotores",
+    "4520-0/10": "Serviços de lanternagem ou funilaria e pintura de veículos automotores",
+    "4520-0/11": "Serviços de manutenção e reparação elétrica de veículos automotores",
+    "4520-0/12": "Serviços de alinhamento e balanceamento de veículos automotores",
+    "4520-0/13": "Serviços de lavagem, lubrificação e enceramento de veículos automotores",
+    "4520-0/14": "Serviços de borracharia para veículos automotores",
+    "4520-0/15": "Outros serviços de manutenção e reparação de veículos automotores",
+    "4543-9/05": "Manutenção e reparação de motocicletas e motonetas",
+    
+    # Comércio atacadista, exceto veículos automotores e motocicletas
+    "4611-7/00": "Representantes comerciais e agentes do comércio de matérias-primas agrícolas e animais vivos",
+    "4612-5/00": "Representantes comerciais e agentes do comércio de combustíveis, minerais, produtos siderúrgicos e químicos",
+    "4613-3/00": "Representantes comerciais e agentes do comércio de madeira, material de construção e ferragens",
+    "4614-1/00": "Representantes comerciais e agentes do comércio de máquinas, equipamentos, embarcações e aeronaves",
+    "4615-0/00": "Representantes comerciais e agentes do comércio de eletrodomésticos, móveis e artigos de uso doméstico",
+    "4616-8/00": "Representantes comerciais e agentes do comércio de têxteis, vestuário, calçados e artigos de viagem",
+    "4617-6/00": "Representantes comerciais e agentes do comércio de produtos alimentícios, bebidas e fumo",
+    "4618-4/00": "Representantes comerciais e agentes do comércio especializado em produtos não especificados anteriormente",
+    "4619-2/00": "Representantes comerciais e agentes do comércio de mercadorias em geral não especializado",
+    "4621-4/00": "Comércio atacadista de café em grão",
+    "4622-2/00": "Comércio atacadista de soja",
+    "4623-1/00": "Comércio atacadista de animais vivos",
+    "4629-0/01": "Comércio atacadista de algodão",
+    "4629-0/02": "Comércio atacadista de fumo em folha não beneficiado",
+    "4629-0/03": "Comércio atacadista de cacau",
+    "4629-0/99": "Comércio atacadista de outros produtos in natura não especificados anteriormente",
+    "4631-1/00": "Comércio atacadista de leite e laticínios",
+    "4632-0/01": "Comércio atacadista de cereais e leguminosas beneficiados",
+    "4633-8/01": "Comércio atacadista de frutas, verduras, raízes, tubérculos, hortaliças e legumes frescos",
+    "4634-6/01": "Comércio atacadista de carnes bovinas e suínas e derivados",
+    "4634-6/02": "Comércio atacadista de aves abatidas e derivados",
+    "4634-6/03": "Comércio atacadista de pescado e frutos do mar",
+    "4635-4/01": "Comércio atacadista de água mineral",
+    "4635-4/02": "Comércio atacadista de cerveja, chope e refrigerante",
+    "4635-4/03": "Comércio atacadista de bebidas com atividade de fracionamento e acondicionamento associada",
+    "4635-4/99": "Comércio atacadista de bebidas não especificadas anteriormente",
+    "4636-2/01": "Comércio atacadista de cigarros, cigarrilhas e charutos",
+    "4636-2/02": "Comércio atacadista de outros produtos do fumo",
+    "4637-1/01": "Comércio atacadista de café torrado, moído e solúvel",
+    "4637-1/02": "Comércio atacadista de açúcar",
+    "4637-1/03": "Comércio atacadista de óleos e gorduras",
+    "4637-1/04": "Comércio atacadista de pães, bolos, biscoitos e similares",
+    "4637-1/05": "Comércio atacadista de massas alimentícias",
+    "4637-1/06": "Comércio atacadista de sorvetes",
+    "4637-1/07": "Comércio atacadista de chocolates, confeitos, balas, bombons e semelhantes",
+    "4637-1/99": "Comércio atacadista especializado em outros produtos alimentícios não especificados anteriormente",
+    "4639-7/01": "Comércio atacadista de produtos alimentícios em geral",
+    "4641-9/01": "Comércio atacadista de tecidos",
+    "4642-7/01": "Comércio atacadista de artigos do vestuário e acessórios",
+    "4643-5/01": "Comércio atacadista de calçados",
+    "4644-3/01": "Comércio atacadista de produtos farmacêuticos para uso humano",
+    "4644-3/02": "Comércio atacadista de produtos farmacêuticos para uso veterinário",
+    "4645-1/01": "Comércio atacadista de instrumentos e materiais para uso médico, cirúrgico, hospitalar e de laboratórios",
+    "4646-0/01": "Comércio atacadista de cosméticos e produtos de perfumaria",
+    "4647-8/01": "Comércio atacadista de artigos de escritório e de papelaria",
+    "4649-4/01": "Comércio atacadista de equipamentos elétricos de uso pessoal e doméstico",
+    "4649-4/02": "Comércio atacadista de aparelhos eletrônicos de uso pessoal e doméstico",
+    "4649-4/03": "Comércio atacadista de bicicletas, triciclos e outros veículos recreativos",
+    "4649-4/04": "Comércio atacadista de móveis e artigos de colchoaria",
+    "4649-4/05": "Comércio atacadista de artigos de tapeçaria, cortinas e persianas",
+    "4649-4/06": "Comércio atacadista de lustres, luminárias e abajures",
+    "4649-4/07": "Comércio atacadista de filmes, CDs, DVDs, fitas cassete, cartuchos para videogames e outros suportes para reprodução de som e imagem",
+    "4649-4/08": "Comércio atacadista de fogos de artifício",
+    "4649-4/09": "Comércio atacadista de equipamentos para escritório",
+    "4649-4/10": "Comércio atacadista de gás liquefeito de petróleo (GLP)",
+    "4649-4/99": "Comércio atacadista de outros equipamentos e artigos de uso pessoal e doméstico não especificados anteriormente",
+    "4651-6/01": "Comércio atacadista de equipamentos de informática",
+    "4652-4/01": "Comércio atacadista de componentes eletrônicos e equipamentos de telefonia e comunicação",
+    "4661-3/01": "Comércio atacadista de máquinas, aparelhos e equipamentos para uso agropecuário",
+    "4662-1/01": "Comércio atacadista de máquinas, equipamentos para terraplenagem, mineração e construção",
+    "4663-0/01": "Comércio atacadista de máquinas e equipamentos para uso industrial",
+    "4664-8/01": "Comércio atacadista de máquinas, aparelhos e equipamentos para uso odonto-médico-hospitalar",
+    "4665-6/01": "Comércio atacadista de máquinas e equipamentos para uso comercial",
+    "4669-9/01": "Comércio atacadista de bombas e compressores",
+    "4669-9/99": "Comércio atacadista de outras máquinas e equipamentos não especificados anteriormente",
+    "4671-1/00": "Comércio atacadista de madeira e produtos derivados",
+    "4672-9/00": "Comércio atacadista de material de construção em geral",
+    "4673-7/00": "Comércio atacadista de material elétrico",
+    "4674-5/00": "Comércio atacadista de cimento",
+    "4679-6/01": "Comércio atacadista de tintas, vernizes e similares",
+    "4679-6/02": "Comércio atacadista de mármores e granitos",
+    "4679-6/03": "Comércio atacadista de vidros, espelhos e vitrais",
+    "4679-6/04": "Comércio atacadista de ferragens e ferramentas",
+    "4679-6/05": "Comércio atacadista de cal, areia, pedra britada, tijolos e telhas",
+    "4679-6/06": "Comércio atacadista de materiais de construção não especificados anteriormente",
+    "4681-8/01": "Comércio atacadista de álcool carburante, biodiesel, gasolina e demais derivados de petróleo",
+    "4682-6/00": "Comércio atacadista de gás liquefeito de petróleo (GLP)",
+    "4683-4/00": "Comércio atacadista de lubrificantes",
+    "4684-2/01": "Comércio atacadista de produtos químicos industriais",
+    "4685-1/01": "Comércio atacadista de produtos siderúrgicos e metalúrgicos",
+    "4686-9/01": "Comércio atacadista de papel e papelão em bruto e de embalagens",
+    "4687-7/01": "Comércio atacadista de resíduos de papel e papelão",
+    "4687-7/02": "Comércio atacadista de resíduos e sucatas não-metálicos",
+    "4687-7/03": "Comércio atacadista de resíduos e sucatas metálicos",
+    "4689-3/99": "Comércio atacadista especializado em outros produtos intermediários não especificados anteriormente",
+    "4691-5/00": "Comércio atacadista não especializado",
+    "4692-3/00": "Comércio atacadista de mercadorias em geral, com predominância de produtos alimentícios",
+    "4693-1/00": "Comércio atacadista de mercadorias em geral, com predominância de insumos agropecuários",
+    "4699-4/00": "Comércio atacadista de mercadorias em geral, sem predominância de alimentos ou de insumos agropecuários",
+    
+    # Comércio varejista
+    "4711-3/01": "Comércio varejista de mercadorias em geral, com predominância de produtos alimentícios - hipermercados",
+    "4711-3/02": "Comércio varejista de mercadorias em geral, com predominância de produtos alimentícios - supermercados",
+    "4712-1/00": "Comércio varejista de mercadorias em geral, com predominância de produtos alimentícios - minimercados, mercearias e armazéns",
+    "4713-0/01": "Lojas de departamentos ou magazines",
+    "4713-0/02": "Lojas de variedades, exceto lojas de departamentos ou magazines",
+    "4721-1/01": "Padaria e confeitaria com predominância de produção própria",
+    "4721-1/02": "Padaria e confeitaria com predominância de revenda",
+    "4721-1/03": "Comércio varejista de laticínios e frios",
+    "4721-1/04": "Comércio varejista de doces, balas, bombons e semelhantes",
+    "4722-9/01": "Comércio varejista de carnes - açougues",
+    "4722-9/02": "Peixaria",
+    "4723-7/00": "Comércio varejista de bebidas",
+    "4724-5/00": "Comércio varejista de hortifrutigranjeiros",
+    "4729-6/01": "Tabacaria",
+    "4729-6/99": "Comércio varejista de produtos alimentícios em geral ou especializado em produtos alimentícios não especificados anteriormente",
+    "4731-8/00": "Comércio varejista de combustíveis para veículos automotores",
+    "4732-6/00": "Comércio varejista de lubrificantes",
+    "4741-5/00": "Comércio varejista de tintas e materiais para pintura",
+    "4742-3/00": "Comércio varejista de material elétrico",
+    "4743-1/00": "Comércio varejista de vidros",
+    "4744-0/01": "Comércio varejista de ferragens e ferramentas",
+    "4744-0/02": "Comércio varejista de madeira e artefatos",
+    "4744-0/03": "Comércio varejista de materiais hidráulicos",
+    "4744-0/04": "Comércio varejista de cal, areia, pedra britada, tijolos e telhas",
+    "4744-0/05": "Comércio varejista de materiais de construção não especificados anteriormente",
+    "4744-0/99": "Comércio varejista de materiais de construção em geral",
+    "4751-2/01": "Comércio varejista especializado de equipamentos e suprimentos de informática",
+    "4751-2/02": "Recarga de cartuchos para equipamentos de informática",
+    "4752-1/00": "Comércio varejista especializado de equipamentos de telefonia e comunicação",
+    "4753-9/00": "Comércio varejista especializado de eletrodomésticos e equipamentos de áudio e vídeo",
+    "4754-7/01": "Comércio varejista de móveis",
+    "4754-7/02": "Comércio varejista de artigos de colchoaria",
+    "4754-7/03": "Comércio varejista de artigos de iluminação",
+    "4755-5/01": "Comércio varejista de tecidos",
+    "4755-5/02": "Comércio varejista de artigos de armarinho",
+    "4755-5/03": "Comércio varejista de artigos do vestuário e acessórios",
+    "4756-3/00": "Comércio varejista especializado de instrumentos musicais e acessórios",
+    "4757-1/00": "Comércio varejista especializado de peças e acessórios para aparelhos eletroeletrônicos para uso doméstico, exceto informática e comunicação",
+    "4759-8/01": "Comércio varejista de artigos de tapeçaria, cortinas e persianas",
+    "4759-8/99": "Comércio varejista de outros artigos de uso pessoal e doméstico não especificados anteriormente",
+    "4761-0/01": "Comércio varejista de livros",
+    "4761-0/02": "Comércio varejista de jornais e revistas",
+    "4761-0/03": "Comércio varejista de artigos de papelaria",
+    "4762-8/00": "Comércio varejista de discos, CDs, DVDs e fitas",
+    "4763-6/01": "Comércio varejista de brinquedos e artigos recreativos",
+    "4763-6/02": "Comércio varejista de artigos esportivos",
+    "4763-6/03": "Comércio varejista de bicicletas e triciclos; peças e acessórios",
+    "4763-6/04": "Comércio varejista de artigos de caça, pesca e camping",
+    "4763-6/05": "Comércio varejista de embarcações e outros veículos recreativos; peças e acessórios",
+    "4771-7/01": "Comércio varejista de produtos farmacêuticos, sem manipulação de fórmulas",
+    "4771-7/02": "Comércio varejista de produtos farmacêuticos, com manipulação de fórmulas",
+    "4771-7/03": "Comércio varejista de produtos farmacêuticos homeopáticos",
+    "4772-5/00": "Comércio varejista de cosméticos, produtos de perfumaria e de higiene pessoal",
+    "4773-3/00": "Comércio varejista de artigos médicos e ortopédicos",
+    "4774-1/00": "Comércio varejista de artigos de óptica",
+    "4781-4/00": "Comércio varejista de artigos do vestuário e acessórios",
+    "4782-2/01": "Comércio varejista de calçados",
+    "4782-2/02": "Comércio varejista de bolsas, malas e artigos de viagem",
+    "4783-1/01": "Comércio varejista de artigos de joalheria",
+    "4783-1/02": "Comércio varejista de artigos de relojoaria",
+    "4784-9/00": "Comércio varejista de gás liquefeito de petróleo (GLP)",
+    "4789-0/01": "Comércio varejista de suvenires, bijuterias e artesanatos",
+    "4789-0/02": "Comércio varejista de plantas e flores naturais",
+    "4789-0/03": "Comércio varejista de objetos de arte",
+    "4789-0/04": "Comércio varejista de animais vivos e de artigos e alimentos para animais de estimação",
+    "4789-0/05": "Comércio varejista de produtos saneantes domissanitários",
+    "4789-0/06": "Comércio varejista de fogos de artifício e artigos pirotécnicos",
+    "4789-0/07": "Comércio varejista de equipamentos para escritório",
+    "4789-0/08": "Comércio varejista de artigos fotográficos e para filmagem",
+    "4789-0/09": "Comércio varejista de armas e munições",
+    "4789-0/99": "Comércio varejista de outros produtos não especificados anteriormente",
+    "4791-0/01": "Comércio varejista não-presencial de produtos em geral",
+    "4799-5/00": "Outros tipos de comércio varejista não especificados anteriormente",
+    
+    # Transporte, armazenagem e correio
+    "4911-6/01": "Transporte ferroviário de passageiros intermunicipal e interestadual",
+    "4912-4/01": "Transporte ferroviário de cargas",
+    "4921-3/01": "Transporte rodoviário coletivo de passageiros, com itinerário fixo, municipal",
+    "4921-3/02": "Transporte rodoviário coletivo de passageiros, com itinerário fixo, intermunicipal em região metropolitana",
+    "4922-1/01": "Transporte rodoviário coletivo de passageiros, com itinerário fixo, intermunicipal",
+    "4922-1/02": "Transporte rodoviário coletivo de passageiros, com itinerário fixo, interestadual",
+    "4922-1/03": "Transporte rodoviário coletivo de passageiros, com itinerário fixo, internacional",
+    "4923-0/01": "Serviço de táxi",
+    "4924-8/00": "Transporte escolar",
+    "4929-9/01": "Transporte rodoviário coletivo de passageiros, sob regime de fretamento, municipal",
+    "4929-9/02": "Transporte rodoviário coletivo de passageiros, sob regime de fretamento, intermunicipal, interestadual e internacional",
+    "4929-9/03": "Organização de excursões em veículos rodoviários próprios, municipal",
+    "4929-9/04": "Organização de excursões em veículos rodoviários próprios, intermunicipal, interestadual e internacional",
+    "4929-9/99": "Outros transportes rodoviários de passageiros não especificados anteriormente",
+    "4930-2/01": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, municipal",
+    "4930-2/02": "Transporte rodoviário de carga, exceto produtos perigosos e mudanças, intermunicipal, interestadual e internacional",
+    "4930-2/03": "Transporte rodoviário de produtos perigosos",
+    "4930-2/04": "Serviços de mudanças",
+    "4940-0/01": "Transporte dutoviário",
+    "4950-7/00": "Trens turísticos, teleféricos e similares",
+    
+    # Transporte aquaviário
+    "5011-4/01": "Transporte marítimo de cabotagem - passageiros",
+    "5011-4/02": "Transporte marítimo de cabotagem - carga",
+    "5012-2/01": "Transporte marítimo de longo curso - passageiros",
+    "5012-2/02": "Transporte marítimo de longo curso - carga",
+    "5021-1/01": "Transporte por navegação interior de passageiros em linhas regulares",
+    "5021-1/02": "Transporte por navegação interior de passageiros - travessia",
+    "5021-1/99": "Outros transportes aquaviários de passageiros não especificados anteriormente",
+    "5022-0/01": "Transporte por navegação interior de carga",
+    "5030-1/01": "Navegação de apoio",
+    "5030-1/02": "Serviços de rebocadores e empurradores",
+    "5030-1/03": "Outros serviços de transporte aquaviário",
+    
+    # Transporte aéreo
+    "5111-1/00": "Transporte aéreo de passageiros regular",
+    "5112-9/01": "Transporte aéreo de passageiros não-regular",
+    "5120-0/00": "Transporte aéreo de carga",
+    "5130-7/00": "Transporte espacial",
+    
+    # Armazenagem e atividades auxiliares dos transportes
+    "5211-7/01": "Armazenamento",
+    "5211-7/02": "Guarda-móveis",
+    "5212-5/00": "Carga e descarga",
+    "5221-4/00": "Concessionárias de rodovias, pontes, túneis e serviços relacionados",
+    "5222-2/00": "Terminais rodoviários e ferroviários",
+    "5223-1/00": "Estacionamentos",
+    "5229-8/01": "Serviços de apoio ao transporte por táxi, inclusive centrais de chamada",
+    "5229-8/99": "Outras atividades auxiliares dos transportes terrestres não especificadas anteriormente",
+    "5231-0/01": "Administração da infraestrutura portuária",
+    "5231-0/02": "Atividades do Operador Portuário",
+    "5232-8/00": "Atividades de agenciamento marítimo",
+    "5239-5/01": "Serviços de praticagem",
+    "5239-5/99": "Outras atividades auxiliares dos transportes aquaviários não especificadas anteriormente",
+    "5240-9/01": "Operação dos aeroportos e campos de aterrissagem",
+    "5240-9/02": "Atividades auxiliares dos transportes aéreos, exceto operação de aeroportos e campos de aterrissagem",
+    "5250-6/01": "Comissarias de despacho",
+    "5250-6/02": "Atividades de despachantes aduaneiros",
+    "5250-6/03": "Agências de viagens",
+    "5250-6/04": "Operadores turísticos",
+    "5250-6/99": "Outras atividades auxiliares dos transportes não especificadas anteriormente",
+    
+    # Correio e outras atividades de entrega
+    "5310-5/01": "Atividades do Correio Nacional",
+    "5310-5/02": "Atividades de franquia postal",
+    "5320-2/01": "Serviços de malote não realizados pelo Correio Nacional",
+    "5320-2/02": "Serviços de entrega rápida",
+    
+    # Alojamento e alimentação
+    "5510-8/01": "Hotéis",
+    "5510-8/02": "Apart-hotéis",
+    "5510-8/03": "Motéis",
+    "5590-6/01": "Albergues, exceto assistenciais",
+    "5590-6/02": "Campings",
+    "5590-6/03": "Pensões (alojamento)",
+    "5590-6/99": "Outros tipos de alojamento não especificados anteriormente",
+    "5611-2/01": "Restaurantes e similares",
+    "5611-2/02": "Bares e outros estabelecimentos especializados em servir bebidas",
+    "5611-2/03": "Lanchonetes, casas de chá, de sucos e similares",
+    "5612-1/00": "Serviços ambulantes de alimentação",
+    "5620-1/01": "Fornecimento de alimentos preparados preponderantemente para empresas",
+    "5620-1/02": "Serviços de alimentação para eventos e recepções - bufê",
+    "5620-1/03": "Cantinas (serviços de alimentação privativos)",
+    "5620-1/99": "Outros serviços de alimentação",
+    
+    # Informação e comunicação
+    "5811-5/00": "Edição de livros",
+    "5812-3/01": "Edição de jornais",
+    "5812-3/02": "Edição de revistas",
+    "5813-1/00": "Edição de cadastros, listas e outros produtos gráficos",
+    "5821-2/00": "Edição de jogos eletrônicos",
+    "5822-1/00": "Edição de softwares não-customizáveis",
+    "5823-9/01": "Edição de música",
+    "5829-8/00": "Edição integrada à impressão",
+    "5911-1/01": "Atividades de produção cinematográfica, de vídeos e de programas de televisão",
+    "5911-1/02": "Atividades de pós-produção cinematográfica, de vídeos e de programas de televisão",
+    "5912-9/01": "Distribuição cinematográfica, de vídeo e de programas de televisão",
+    "5913-7/00": "Atividades de exibição cinematográfica",
+    "5914-5/00": "Atividades de produção de programas de televisão, não especificadas anteriormente",
+    "5920-1/00": "Atividades de gravação de som e de edição de música",
+    "6010-1/00": "Atividades de rádio",
+    "6021-7/00": "Atividades de televisão aberta",
+    "6022-5/00": "Programadoras e atividades relacionadas à televisão por assinatura",
+    "6110-8/01": "Serviços de telefonia fixa comutada - STFC",
+    "6110-8/02": "Serviços de redes de transportes de telecomunicações - SRTT",
+    "6110-8/03": "Serviços de comunicação multimídia - SCM",
+    "6120-5/01": "Telefonia móvel celular",
+    "6120-5/02": "Telefonia móvel por satélite",
+    "6120-5/99": "Outros serviços de telecomunicações não especificados anteriormente",
+    "6130-2/00": "Telecomunicações por satélite",
+    "6141-8/00": "Operadoras de televisão por assinatura por cabo",
+    "6142-6/00": "Operadoras de televisão por assinatura por microondas",
+    "6143-4/00": "Operadoras de televisão por assinatura por satélite",
+    "6190-6/01": "Provedores de acesso às redes de comunicações",
+    "6190-6/99": "Outras atividades de telecomunicações não especificadas anteriormente",
+    "6201-5/00": "Desenvolvimento de programas de computador sob encomenda",
+    "6202-3/00": "Desenvolvimento e licenciamento de programas de computador customizáveis",
+    "6203-1/00": "Desenvolvimento e licenciamento de programas de computador não-customizáveis",
+    "6204-0/00": "Consultoria em tecnologia da informação",
+    "6209-1/00": "Suporte técnico, manutenção e outros serviços em tecnologia da informação",
+    "6311-9/00": "Tratamento de dados, provedores de serviços de aplicação e serviços de hospedagem na internet",
+    "6319-4/00": "Portais, provedores de conteúdo e outros serviços de informação na internet",
+    "6391-7/00": "Agências de notícias",
+    "6399-2/00": "Outras atividades de prestação de serviços de informação não especificadas anteriormente",
+    
+    # Atividades financeiras, de seguros e serviços relacionados
+    "6411-8/01": "Banco Central",
+    "6412-6/01": "Bancos comerciais",
+    "6412-6/02": "Bancos múltiplos, com carteira comercial",
+    "6413-4/00": "Caixas econômicas",
+    "6421-5/00": "Bancos múltiplos, sem carteira comercial",
+    "6422-3/01": "Bancos de investimento",
+    "6422-3/02": "Bancos de desenvolvimento",
+    "6423-1/01": "Sociedades de crédito, financiamento e investimento - financeiras",
+    "6424-0/00": "Sociedades de crédito imobiliário",
+    "6431-2/00": "Sociedades de crédito ao microempreendedor",
+    "6432-1/00": "Estabelecimentos de crédito cooperativo",
+    "6433-9/01": "Sociedades de crédito para aquisição de bens, direitos e serviços",
+    "6434-7/00": "Companhias hipotecárias",
+    "6435-5/01": "Associações de poupança e empréstimo",
+    "6435-5/02": "Companhias ou sociedades de economia mista de crédito imobiliário",
+    "6436-3/01": "Cooperativas centrais de crédito",
+    "6436-3/02": "Cooperativas de crédito mútuo",
+    "6436-3/03": "Cooperativas de crédito rural",
+    "6437-1/00": "Sociedades de fomento mercantil - factoring",
+    "6440-1/01": "Arrendamento mercantil",
+    "6450-9/01": "Sociedades de capitalização",
+    "6461-4/00": "Holdings de instituições financeiras",
+    "6462-2/00": "Holdings de instituições não-financeiras",
+    "6463-1/00": "Outras sociedades de participação, exceto holdings",
+    "6470-3/01": "Fundos de investimento",
+    "6491-6/01": "Sociedades de fomento de negócios no Estado",
+    "6492-4/00": "Securitização de créditos",
+    "6493-2/00": "Administração de consórcios para aquisição de bens e direitos",
+    "6499-1/99": "Outras atividades de serviços financeiros não especificadas anteriormente",
+    "6511-1/01": "Seguros de vida",
+    "6512-0/01": "Seguros não-vida",
+    "6520-1/00": "Seguros-saúde",
+    "6530-8/00": "Resseguros",
+    "6541-3/00": "Previdência complementar fechada",
+    "6542-1/00": "Previdência complementar aberta",
+    "6550-2/01": "Planos de auxílio-funeral",
+    "6550-2/02": "Planos de saúde",
+    "6611-8/01": "Administração de bolsas e mercados de balcão organizados",
+    "6612-6/01": "Corretoras de títulos e valores mobiliários",
+    "6612-6/02": "Distribuidoras de títulos e valores mobiliários",
+    "6613-4/00": "Administração de cartões de crédito",
+    "6619-3/01": "Serviços de liquidação e custódia",
+    "6619-3/02": "Correspondentes de instituições financeiras",
+    "6619-3/03": "Representações de bancos estrangeiros",
+    "6619-3/04": "Caixas eletrônicos",
+    "6619-3/05": "Operadoras de cartões de débito",
+    "6619-3/99": "Outras atividades auxiliares dos serviços financeiros não especificadas anteriormente",
+    "6621-5/00": "Avaliação de riscos e perdas",
+    "6622-3/00": "Corretores e agentes de seguros, de planos de previdência complementar e de saúde",
+    "6629-1/00": "Outras atividades auxiliares dos seguros, da previdência complementar e dos planos de saúde",
+    "6630-4/00": "Atividades auxiliares dos fundos de pensão, de entidades abertas de previdência complementar e de entidades de previdência social",
+    
+    # Atividades imobiliárias
+    "6810-2/01": "Compra e venda de imóveis próprios",
+    "6810-2/02": "Aluguel de imóveis próprios",
+    "6821-8/01": "Corretagem na compra e venda e avaliação de imóveis",
+    "6821-8/02": "Corretagem no aluguel de imóveis",
+    "6822-6/00": "Gestão e administração da propriedade imobiliária",
+    
+    # Atividades profissionais, científicas e técnicas
+    "6910-6/00": "Atividades jurídicas",
+    "6920-3/00": "Atividades de contabilidade",
+    "7020-4/00": "Atividades de consultoria em gestão empresarial",
+    "7111-1/00": "Serviços de arquitetura",
+    "7112-0/00": "Serviços de engenharia",
+    "7119-7/01": "Serviços de cartografia, topografia e geodésia",
+    "7119-7/02": "Atividades de estudos geológicos",
+    "7119-7/03": "Serviços de desenho técnico relacionados à arquitetura e engenharia",
+    "7119-7/99": "Outras atividades profissionais, científicas e técnicas não especificadas anteriormente",
+    "7120-1/00": "Testes e análises técnicas",
+    "7210-0/00": "Pesquisa e desenvolvimento experimental em ciências físicas e naturais",
+    "7220-7/00": "Pesquisa e desenvolvimento experimental em ciências sociais e humanas",
+    "7311-4/00": "Agências de publicidade",
+    "7312-2/00": "Agenciamento de espaços para publicidade, exceto em veículos de comunicação",
+    "7319-0/01": "Criação e produção de espetáculos",
+    "7319-0/02": "Produção musical",
+    "7319-0/03": "Produção de espetáculos circenses, de marionetes e similares",
+    "7319-0/04": "Atividades de sonorização e de iluminação",
+    "7319-0/99": "Outras atividades de publicidade não especificadas anteriormente",
+    "7320-3/00": "Pesquisas de mercado e de opinião pública",
+    "7410-2/01": "Design",
+    "7410-2/02": "Decoração de interiores",
+    "7410-2/03": "Atividades de design não especificadas anteriormente",
+    "7420-0/01": "Atividades de fotografia e similares",
+    "7490-1/01": "Serviços de tradução, interpretação e similares",
+    "7490-1/02": "Escafandria e mergulho",
+    "7490-1/03": "Serviços de agronomia e de consultoria às atividades agrícolas e pecuárias",
+    "7490-1/04": "Atividades de intermediação e agenciamento de serviços e negócios em geral, exceto imobiliários",
+    "7490-1/05": "Agenciamento de profissionais para atividades esportivas, culturais e artísticas",
+    "7490-1/99": "Outras atividades profissionais, científicas e técnicas não especificadas anteriormente",
+    
+    # Atividades administrativas e serviços complementares
+    "7500-1/00": "Atividades veterinárias",
+    "7711-0/00": "Locação de automóveis sem condutor",
+    "7719-5/01": "Locação de embarcações sem tripulação, exceto para fins recreativos",
+    "7719-5/02": "Locação de aeronaves sem tripulação",
+    "7719-5/99": "Locação de outros meios de transporte não especificados anteriormente, sem condutor",
+    "7721-7/00": "Aluguel de equipamentos recreativos e esportivos",
+    "7722-5/00": "Aluguel de fitas de vídeo, DVDs e similares",
+    "7723-3/00": "Aluguel de objetos do vestuário, jóias e acessórios",
+    "7729-2/01": "Aluguel de aparelhos de jogos eletrônicos",
+    "7729-2/02": "Aluguel de móveis, utensílios e aparelhos de uso doméstico e pessoal; instrumentos musicais",
+    "7729-2/03": "Aluguel de material médico",
+    "7729-2/99": "Aluguel de outros objetos pessoais e domésticos não especificados anteriormente",
+    "7731-4/00": "Aluguel de máquinas e equipamentos agrícolas sem operador",
+    "7732-2/01": "Aluguel de máquinas e equipamentos para construção sem operador, exceto andaimes",
+    "7732-2/02": "Aluguel de andaimes",
+    "7733-1/00": "Aluguel de máquinas e equipamentos para escritório",
+    "7739-0/01": "Aluguel de máquinas, equipamentos e outros bens tangíveis não especificados anteriormente",
+    "7740-3/00": "Gestão de ativos intangíveis não-financeiros",
+    "7810-8/00": "Seleção e agenciamento de mão-de-obra",
+    "7820-5/00": "Locação de mão-de-obra temporária",
+    "7830-2/00": "Fornecimento e gestão de recursos humanos para terceiros",
+    "7911-2/00": "Agências de viagem",
+    "7912-1/00": "Operadores turísticos",
+    "7990-2/00": "Outros serviços de reserva e atividades relacionadas",
+    "8011-1/01": "Atividades de vigilância e segurança privada",
+    "8011-1/02": "Serviços de adestramento de cães de guarda",
+    "8012-9/00": "Atividades de transporte de valores",
+    "8020-0/00": "Atividades de monitoramento de sistemas de segurança",
+    "8030-7/00": "Atividades de investigação particular",
+    "8111-7/00": "Serviços combinados para apoio a edifícios, exceto condomínios prediais",
+    "8112-5/00": "Condomínios prediais",
+    "8121-4/00": "Limpeza em prédios e em domicílios",
+    "8122-2/00": "Imunização e controle de pragas urbanas",
+    "8129-0/00": "Atividades de limpeza não especificadas anteriormente",
+    "8130-3/00": "Atividades paisagísticas",
+    "8211-3/00": "Serviços de organização de feiras, congressos, exposições e festas",
+    "8219-9/01": "Fotocópias",
+    "8219-9/99": "Preparação de documentos e serviços especializados de apoio administrativo não especificados anteriormente",
+    "8220-2/00": "Atividades de teleatendimento",
+    "8230-0/01": "Serviços de organização de feiras, congressos, exposições e festas",
+    "8291-1/00": "Atividades de cobrança e informações cadastrais",
+    "8292-0/00": "Envasamento e empacotamento sob contrato",
+    "8299-7/01": "Medição de consumo de energia elétrica, gás e água",
+    "8299-7/02": "Atividades de emissão de vales-alimentação, vales-transporte e similares",
+    "8299-7/03": "Serviços de gravação de carimbos, exceto confecção",
+    "8299-7/04": "Leilão (exceto o leilão eletrônico)",
+    "8299-7/05": "Expedição de documentos",
+    "8299-7/06": "Casas lotéricas",
+    "8299-7/07": "Salas de acesso à internet",
+    "8299-7/99": "Outras atividades de serviços prestados principalmente às empresas não especificadas anteriormente",
+    
+    # Administração pública, defesa e seguridade social
+    "8411-6/00": "Administração pública em geral",
+    "8412-4/01": "Regulação das atividades de saúde, educação, serviços culturais e outros serviços sociais",
+    "8412-4/02": "Regulação das atividades econômicas",
+    "8413-2/00": "Regulação das atividades de transportes, comunicações e de outros serviços públicos",
+    "8421-3/00": "Relações exteriores",
+    "8422-1/00": "Defesa",
+    "8423-0/00": "Justiça",
+    "8424-8/00": "Segurança e ordem pública",
+    "8425-6/00": "Defesa Civil",
+    "8430-2/00": "Seguridade social obrigatória",
+    
+    # Educação
+    "8511-2/00": "Educação infantil - creche",
+    "8512-1/00": "Educação infantil - pré-escola",
+    "8513-9/00": "Ensino fundamental",
+    "8520-1/01": "Ensino médio",
+    "8531-7/00": "Educação superior - graduação",
+    "8532-5/00": "Educação superior - graduação e pós-graduação",
+    "8533-3/00": "Educação superior - pós-graduação e extensão",
+    "8541-4/00": "Educação profissional de nível técnico",
+    "8542-2/00": "Educação profissional de nível tecnológico",
+    "8550-3/01": "Administração de caixas escolares",
+    "8550-3/02": "Atividades de apoio à educação, exceto caixas escolares",
+    "8591-1/00": "Ensino de esportes",
+    "8592-9/01": "Ensino de idiomas",
+    "8592-9/02": "Ensino de artes cênicas, exceto dança",
+    "8592-9/03": "Ensino de dança",
+    "8593-7/00": "Ensino de música",
+    "8599-6/01": "Formação de condutores",
+    "8599-6/02": "Cursos de pilotagem",
+    "8599-6/03": "Treinamento em informática",
+    "8599-6/04": "Treinamento em desenvolvimento profissional e gerencial",
+    "8599-6/05": "Cursos preparatórios para concursos",
+    "8599-6/99": "Outras atividades de ensino não especificadas anteriormente",
+    
+    # Saúde humana e serviços sociais
+    "8610-1/01": "Atividades de atendimento hospitalar, exceto pronto-socorro e unidades para atendimento a urgências",
+    "8610-1/02": "Atividades de atendimento em pronto-socorro e unidades hospitalares para atendimento a urgências",
+    "8621-6/01": "UTI móvel",
+    "8621-6/02": "Serviços móveis de atendimento a urgências, exceto por UTI móvel",
+    "8622-4/00": "Serviços de remoção de pacientes, exceto os serviços móveis de atendimento a urgências",
+    "8630-5/01": "Atividade médica ambulatorial com recursos para realização de procedimentos cirúrgicos",
+

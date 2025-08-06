@@ -1,0 +1,90 @@
+# ===== CNAE PROSPECTOR - GITIGNORE =====
+
+# ===== SENSITIVE FILES =====
+.env
+*.key
+*.pem
+config/google_sheets.json
+credentials/
+
+# ===== PYTHON =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ===== VIRTUAL ENVIRONMENTS =====
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# ===== IDE =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ===== LOGS =====
+logs/
+*.log
+*.log.*
+
+# ===== DATA FILES =====
+data/exports/*.csv
+data/exports/*.xlsx
+data/raw/*.csv
+data/raw/*.json
+data/processed/*.csv
+
+# Keep directory structure but ignore contents
+!data/exports/.gitkeep
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# ===== TEMPORARY FILES =====
+*.tmp
+*.temp
+.cache/
+.pytest_cache/
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ===== JUPYTER =====
+.ipynb_checkpoints
+*.ipynb
+
+# ===== TEST COVERAGE =====
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# ===== DOCUMENTATION =====
+docs/_build/
+
+# ===== BACKUP FILES =====
+*.bak
+*.backup
