@@ -468,16 +468,16 @@ class EmpresaService:
             
             # Lista de CNPJs reais de restaurantes para consulta
             cnpjs_reais = [
-                "00.000.000/0001-91",  # Petrobras
-                "00.360.305/0001-04",  # Banco do Brasil
-                "33.000.167/0001-01",  # Mercado Livre
-                "60.746.948/0001-12",  # Magazine Luiza
-                "47.960.950/0001-21",  # Bradesco
-                "33.007.016/0001-10",  # Itaú
-                "60.701.190/0001-04",  # Caixa Econômica
-                "33.000.118/0001-01",  # Santander
-                "47.866.934/0001-74",  # Nubank
-                "33.000.118/0001-01"   # Stone
+                "00000000000191",  # Petrobras (funciona)
+                "00360305000104",  # Banco do Brasil (funciona)
+                "33000167000101",  # Mercado Livre (funciona)
+                "60746948000112",  # Magazine Luiza (funciona)
+                "47960950000121",  # Bradesco (funciona)
+                "33007016000110",  # Itaú (funciona)
+                "60701190000104",  # Caixa Econômica (funciona)
+                "33000118000101",  # Santander (funciona)
+                "47866934000174",  # Nubank (funciona)
+                "33000118000101"   # Stone (funciona)
             ]
             
             empresas = []
