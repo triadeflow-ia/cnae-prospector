@@ -79,17 +79,21 @@ class Settings:
     
     def validate(self):
         """Valida as configurações essenciais"""
+        # Validação mais flexível - não falha se as variáveis não estiverem configuradas
+        warnings = []
+        
         if not self.RAPIDAPI_KEY:
-            raise ValueError(
-                "RAPIDAPI_KEY não configurada. "
-                "Por favor, defina a variável de ambiente RAPIDAPI_KEY no arquivo .env"
-            )
+            warnings.append("RAPIDAPI_KEY não configurada - usando dados demonstrativos")
         
         if self.RAPIDAPI_KEY == "sua_chave_aqui":
-            raise ValueError(
-                "RAPIDAPI_KEY ainda está com o valor padrão. "
-                "Por favor, substitua pela sua chave real da RapidAPI"
-            )
+            warnings.append("RAPIDAPI_KEY ainda está com o valor padrão - usando dados demonstrativos")
+        
+        # Apenas mostra warnings, não falha
+        if warnings:
+            print("⚠️ Configurações:")
+            for warning in warnings:
+                print(f"   {warning}")
+            print("   O sistema funcionará com dados demonstrativos")
     
     def get_api_headers(self) -> dict:
         """Retorna os headers para requisições à API"""
