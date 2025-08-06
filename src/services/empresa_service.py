@@ -300,8 +300,12 @@ class EmpresaService:
     def _buscar_via_nuvem_fiscal(self, cnae: str, uf: str, cidade: str, limite: int) -> List[Empresa]:
         """Busca empresas via API Nuvem Fiscal (usando consultas individuais de CNPJ)"""
         try:
+            logger.info(f"Tentando buscar via Nuvem Fiscal - CNAE: {cnae}, UF: {uf}, Cidade: {cidade}")
+            
             if not self.settings.NUVEM_FISCAL_CLIENT_ID or not self.settings.NUVEM_FISCAL_CLIENT_SECRET:
-                logger.info("Credenciais da Nuvem Fiscal não configuradas")
+                logger.warning("Credenciais da Nuvem Fiscal não configuradas")
+                logger.info(f"NUVEM_FISCAL_CLIENT_ID: {'Configurado' if self.settings.NUVEM_FISCAL_CLIENT_ID else 'Não configurado'}")
+                logger.info(f"NUVEM_FISCAL_CLIENT_SECRET: {'Configurado' if self.settings.NUVEM_FISCAL_CLIENT_SECRET else 'Não configurado'}")
                 return []
             
             # Obter token de acesso
@@ -309,6 +313,8 @@ class EmpresaService:
             if not token:
                 logger.error("Não foi possível obter token da Nuvem Fiscal")
                 return []
+            
+            logger.info("Token da Nuvem Fiscal obtido com sucesso")
             
             # Como não temos cota para listagem, vamos usar CNPJs demonstrativos 
             # e consultar dados reais da Nuvem Fiscal para eles
@@ -319,6 +325,8 @@ class EmpresaService:
             
         except Exception as e:
             logger.error(f"Erro na API Nuvem Fiscal: {e}")
+            import traceback
+            logger.error(f"Traceback: {traceback.format_exc()}")
             return []
     
     def _obter_token_nuvem_fiscal(self) -> Optional[str]:
@@ -602,7 +610,26 @@ class EmpresaService:
             
             # Dados específicos por CNAE
             dados_por_cnae = {
-                "5611201": {  # Restaurantes
+                "5611201": {  # Restaurantes (formato sem hífen)
+                    "nomes": [
+                        "RESTAURANTE BOM SABOR LTDA",
+                        "PIZZARIA ITALIANA MAMA MIA LTDA",
+                        "LANCHONETE DO ZÉ EIRELI",
+                        "RESTAURANTE E CHURRASCARIA GAÚCHA LTDA",
+                        "BISTRO FRANCÊS LTDA",
+                        "RESTAURANTE VEGETARIANO VIDA SAUDÁVEL",
+                        "PIZZARIA E RESTAURANTE FAMÍLIA LTDA",
+                        "RESTAURANTE JAPONÊS SUSHI HOUSE",
+                        "CANTINA ITALIANA NONNA ROSA",
+                        "RESTAURANTE MINEIRO SABOR DA ROÇA"
+                    ],
+                    "descricao": "Restaurantes e similares",
+                    "bairros_uberlandia": [
+                        "Centro", "Saraiva", "Santa Mônica", "Jardim Brasília",
+                        "Tibery", "Umuarama", "Segismundo Pereira", "Roosevelt"
+                    ]
+                },
+                "5611202": {  # Restaurantes (formato com hífen)
                     "nomes": [
                         "RESTAURANTE BOM SABOR LTDA",
                         "PIZZARIA ITALIANA MAMA MIA LTDA",
