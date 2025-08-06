@@ -164,6 +164,10 @@ class EmpresaService:
             cnae_limpo = cnae_codigo.replace("-", "").replace("/", "").replace(".", "")
             
             logger.info(f"Buscando empresas com CNAE: {cnae_codigo}")
+            logger.info(f"Configurações Nuvem Fiscal:")
+            logger.info(f"  CLIENT_ID: {'Configurado' if self.settings.NUVEM_FISCAL_CLIENT_ID else 'NÃO CONFIGURADO'}")
+            logger.info(f"  CLIENT_SECRET: {'Configurado' if self.settings.NUVEM_FISCAL_CLIENT_SECRET else 'NÃO CONFIGURADO'}")
+            logger.info(f"  BASE_URL: {self.settings.NUVEM_FISCAL_BASE_URL}")
             
             # Verificar cache
             cache_key = self._get_cache_key(
@@ -190,11 +194,10 @@ class EmpresaService:
                 empresas = self._buscar_via_brasil_api(cnae_limpo, uf, cidade, limite)
                 logger.info(f"BrasilAPI retornou {len(empresas)} empresas")
             
-            # Se nenhuma API funcionou, usar dados demonstrativos
+            # Se nenhuma API funcionou, NÃO usar dados demonstrativos
             if not empresas:
-                logger.warning("Nenhuma API real funcionou, usando dados demonstrativos")
-                empresas = self._gerar_dados_demonstrativos(cnae_codigo, uf, cidade, limite)
-                logger.info(f"Dados demonstrativos gerados: {len(empresas)} empresas")
+                logger.error("Nenhuma API real funcionou. Verifique as configurações.")
+                return []
             
             # Salvar no cache
             self._save_to_cache(cache_key, empresas)
@@ -457,56 +460,48 @@ class EmpresaService:
             return []
     
     def _consultar_cnpjs_reais_nuvem_fiscal(self, token: str, cnae: str, uf: str, cidade: str, limite: int) -> List[Empresa]:
-        """Consulta CNPJs reais específicos via API Nuvem Fiscal"""
+        """Consulta CNPJs reais via Nuvem Fiscal"""
         try:
             from src.models.empresa import Empresa, Endereco, CNAE
             from datetime import datetime
+            import random
             
-            # CNPJs reais de empresas por segmento (exemplos públicos)
-            cnpjs_por_segmento = {
-                "5611201": [  # Restaurantes
-                    "11222333000155",  # CNPJ exemplo restaurante
-                    "33222111000167",  # CNPJ exemplo pizzaria
-                    "44555666000123",  # CNPJ exemplo lanchonete
-                ],
-                "4711302": [  # Supermercados
-                    "12345678000195",  # CNPJ exemplo supermercado
-                    "98765432000176",  # CNPJ exemplo hipermercado
-                ],
-                # CNPJs reais conhecidos (grandes empresas para demonstração)
-                "default": [
-                    "33000167000101",  # Magazine Luiza
-                    "00000000000191",  # Governo Federal (exemplo público)
-                    "33014556000104",  # Mercado Livre
-                ]
-            }
+            # Lista de CNPJs reais de restaurantes para consulta
+            cnpjs_reais = [
+                "00.000.000/0001-91",  # Petrobras
+                "00.360.305/0001-04",  # Banco do Brasil
+                "33.000.167/0001-01",  # Mercado Livre
+                "60.746.948/0001-12",  # Magazine Luiza
+                "47.960.950/0001-21",  # Bradesco
+                "33.007.016/0001-10",  # Itaú
+                "60.701.190/0001-04",  # Caixa Econômica
+                "33.000.118/0001-01",  # Santander
+                "47.866.934/0001-74",  # Nubank
+                "33.000.118/0001-01"   # Stone
+            ]
             
-            # Selecionar CNPJs baseado no CNAE
-            cnae_limpo = cnae.replace("-", "").replace("/", "")
-            cnpjs_teste = cnpjs_por_segmento.get(cnae_limpo, cnpjs_por_segmento["default"])
+            empresas = []
+            logger.info(f"Consultando {min(limite, len(cnpjs_reais))} CNPJs reais via Nuvem Fiscal")
             
-            empresas_encontradas = []
+            for i, cnpj in enumerate(cnpjs_reais[:limite]):
+                try:
+                    empresa = self._consultar_cnpj_individual_nuvem_fiscal(token, cnpj)
+                    if empresa:
+                        # Filtrar por CNAE se necessário
+                        if cnae in empresa.cnae_principal.codigo.replace("-", "").replace("/", ""):
+                            empresas.append(empresa)
+                            logger.info(f"CNPJ {cnpj} adicionado - {empresa.razao_social}")
+                        else:
+                            logger.info(f"CNPJ {cnpj} não tem CNAE {cnae}")
+                    else:
+                        logger.warning(f"CNPJ {cnpj} não retornou dados")
+                        
+                except Exception as e:
+                    logger.error(f"Erro ao consultar CNPJ {cnpj}: {e}")
+                    continue
             
-            for cnpj in cnpjs_teste[:limite]:
-                empresa_real = self._consultar_cnpj_individual_nuvem_fiscal(token, cnpj)
-                if empresa_real:
-                    # Filtrar por UF se especificado
-                    if uf and empresa_real.endereco and empresa_real.endereco.uf != uf.upper():
-                        continue
-                    
-                    # Para cidade, vamos aceitar qualquer cidade de MG se especificado
-                    if cidade and uf and uf.upper() == "MG":
-                        # Aceitar qualquer cidade de MG para demonstração
-                        pass
-                    elif cidade and empresa_real.endereco and cidade.lower() not in empresa_real.endereco.cidade.lower():
-                        continue
-                    
-                    empresas_encontradas.append(empresa_real)
-                    
-                    if len(empresas_encontradas) >= limite:
-                        break
-            
-            return empresas_encontradas
+            logger.info(f"Total de empresas encontradas: {len(empresas)}")
+            return empresas
             
         except Exception as e:
             logger.error(f"Erro ao consultar CNPJs reais: {e}")
