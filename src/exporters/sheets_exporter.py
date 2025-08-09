@@ -4,6 +4,7 @@ Exportador para Google Sheets
 
 import os
 from typing import List, Dict, Any
+import json
 from loguru import logger
 
 import gspread
@@ -26,22 +27,31 @@ class GoogleSheetsExporter:
         """Configura o cliente do Google Sheets"""
         try:
             credentials_path = self.settings.GOOGLE_SHEETS_CREDENTIALS_PATH
-            
-            if not os.path.exists(credentials_path):
-                logger.error(f"Arquivo de credenciais não encontrado: {credentials_path}")
-                return
-            
+
             # Define o escopo
             scope = [
                 'https://spreadsheets.google.com/feeds',
                 'https://www.googleapis.com/auth/drive'
             ]
             
-            # Carrega as credenciais
-            credentials = Credentials.from_service_account_file(
-                credentials_path, 
-                scopes=scope
-            )
+            # Preferir credenciais via variável de ambiente (para plataformas como Railway)
+            raw_json = os.getenv('GOOGLE_SHEETS_CREDENTIALS_JSON')
+            if raw_json:
+                try:
+                    info = json.loads(raw_json)
+                    credentials = Credentials.from_service_account_info(info, scopes=scope)
+                except Exception as e:
+                    logger.error(f"Credenciais JSON inválidas em GOOGLE_SHEETS_CREDENTIALS_JSON: {e}")
+                    return
+            else:
+                # Carregar de arquivo local
+                if not os.path.exists(credentials_path):
+                    logger.error(f"Arquivo de credenciais não encontrado: {credentials_path}")
+                    return
+                credentials = Credentials.from_service_account_file(
+                    credentials_path,
+                    scopes=scope
+                )
             
             # Cria o cliente
             self.client = gspread.authorize(credentials)
