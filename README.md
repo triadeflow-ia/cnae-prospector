@@ -14,7 +14,7 @@ O **CNAE Prospector** é uma ferramenta profissional de prospecção B2B que aut
 - **📊 Integração Google Sheets**: Exportação automática para planilhas organizadas
 - **🎯 Lead Scoring**: Classificação automática de potencial dos leads
 - **📁 Múltiplos Formatos**: Exportação em CSV e Excel
-- **🔄 APIs Múltiplas**: Integração com Nuvem Fiscal, CNPJ.ws e BrasilAPI
+- **🔄 Fonte Principal**: Integração com Nuvem Fiscal (BrasilAPI usada apenas como fallback para completar endereço)
 - **📱 Interface CLI**: Linha de comando intuitiva para automação
 
 ## 🏗️ Arquitetura
@@ -66,16 +66,12 @@ cp .env.example .env
 
 ### APIs Suportadas
 
-1. **Nuvem Fiscal** (Recomendado)
+1. **Nuvem Fiscal** (Recomendado e utilizado)
    - Acesse: [Nuvem Fiscal](https://nuvemfiscal.com.br)
    - Obtenha: `CLIENT_ID` e `CLIENT_SECRET`
 
-2. **CNPJ.ws** (Alternativa)
-   - Acesse: [CNPJ.ws](https://cnpj.ws)
-   - Obtenha sua API key
-
-3. **BrasilAPI** (Gratuito)
-   - Sem necessidade de configuração
+2. **BrasilAPI** (fallback gratuito para enriquecimento de endereço)
+   - Sem necessidade de configuração (usada automaticamente quando faltar endereço)
 
 ### Google Sheets (Opcional)
 

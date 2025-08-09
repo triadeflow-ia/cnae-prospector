@@ -30,10 +30,18 @@ class Settings:
                          self.EXPORTS_DIR, self.LOGS_DIR, self.CONFIG_DIR]:
             directory.mkdir(parents=True, exist_ok=True)
         
-        # API Configuration
+        # API Configuration (RapidAPI)
         self.RAPIDAPI_KEY = os.getenv("RAPIDAPI_KEY", "")
-        self.RAPIDAPI_HOST = "cnpj-busca-empresa.p.rapidapi.com"
-        self.RAPIDAPI_BASE_URL = "https://cnpj-busca-empresa.p.rapidapi.com"
+        # Base URL e Host podem vir do .env; fazer saneamento do host
+        self.RAPIDAPI_BASE_URL = os.getenv(
+            "RAPIDAPI_BASE_URL",
+            os.getenv("RAPIDAPI_HOST", "https://cnpj-busca-empresa.p.rapidapi.com")
+        )
+        # Extrair apenas o host sem esquema/caminho para o header X-RapidAPI-Host
+        raw_host = os.getenv("RAPIDAPI_HOST", "cnpj-busca-empresa.p.rapidapi.com")
+        self.RAPIDAPI_HOST = (
+            raw_host.replace("https://", "").replace("http://", "").split("/")[0]
+        )
         
         # Google Sheets (opcional)
         self.GOOGLE_SHEETS_CREDENTIALS_PATH = os.getenv(

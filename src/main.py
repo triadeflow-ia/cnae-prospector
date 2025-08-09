@@ -1,6 +1,6 @@
 """
 CNAE Prospector - Sistema de Prospecção de Empresas por CNAE
-Busca empresas na API da Receita Federal através da RapidAPI
+Fonte principal: Nuvem Fiscal (fallback: BrasilAPI para enriquecer endereço)
 """
 
 import os

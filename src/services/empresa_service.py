@@ -2,6 +2,7 @@
 Serviço para buscar empresas na API da Receita Federal via RapidAPI
 """
 
+import os
 import time
 import json
 import requests
@@ -318,12 +319,21 @@ class EmpresaService:
                 return []
             
             logger.info("Token da Nuvem Fiscal obtido com sucesso")
-            
-            # Como não temos cota para listagem, vamos usar CNPJs demonstrativos 
-            # e consultar dados reais da Nuvem Fiscal para eles
+
+            # Tentar listagem oficial se UF e cidade forem fornecidos (via código IBGE)
+            if uf and cidade:
+                codigo_ibge = self._obter_codigo_municipio_ibge(cidade, uf)
+                if codigo_ibge:
+                    empresas_listagem = self._fazer_busca_nuvem_fiscal(token, cnae, codigo_ibge, limite)
+                    if empresas_listagem:
+                        logger.info(f"Nuvem Fiscal (listagem) retornou {len(empresas_listagem)} empresas")
+                        return empresas_listagem
+                else:
+                    logger.warning(f"Código IBGE não mapeado para {cidade}/{uf}; pulando listagem por município")
+
+            # Fallback: consultar CNPJs conhecidos e obter dados reais
             empresas = self._consultar_cnpjs_reais_nuvem_fiscal(token, cnae, uf, cidade, limite)
-            
-            logger.info(f"Nuvem Fiscal retornou {len(empresas)} empresas")
+            logger.info(f"Nuvem Fiscal (fallback CNPJs) retornou {len(empresas)} empresas")
             return empresas
             
         except Exception as e:
@@ -367,11 +377,10 @@ class EmpresaService:
             return None
     
     def _obter_codigo_municipio_ibge(self, cidade: str, uf: str) -> Optional[str]:
-        """Obtém código IBGE do município"""
-        # Mapeamento básico de algumas cidades principais
+        """Obtém código IBGE do município; tenta online se não estiver mapeado"""
         mapeamento = {
             ("Uberlândia", "MG"): "3170107",
-            ("São Paulo", "SP"): "3550308", 
+            ("São Paulo", "SP"): "3550308",
             ("Rio de Janeiro", "RJ"): "3304557",
             ("Belo Horizonte", "MG"): "3106200",
             ("Brasília", "DF"): "5300108",
@@ -381,8 +390,22 @@ class EmpresaService:
             ("Fortaleza", "CE"): "2304400",
             ("Recife", "PE"): "2611606"
         }
-        
-        return mapeamento.get((cidade, uf))
+        codigo = mapeamento.get((cidade, uf))
+        if codigo:
+            return codigo
+        # Tenta BrasilAPI IBGE
+        try:
+            self._rate_limit()
+            url = f"https://brasilapi.com.br/api/ibge/municipios/v1/{uf}?providers=dados-abertos-br,gov,wikipedia"
+            resp = self.session.get(url, timeout=self.settings.REQUEST_TIMEOUT)
+            if resp.status_code == 200:
+                for mun in resp.json():
+                    if str(mun.get('nome', '')).strip().lower() == cidade.strip().lower():
+                        # Alguns providers retornam campo 'codigo_ibge' ou 'codigo'
+                        return str(mun.get('codigo_ibge') or mun.get('codigo') or '').strip()
+        except Exception:
+            pass
+        return None
     
     def _fazer_busca_nuvem_fiscal(self, token: str, cnae: str, municipio: str, limite: int) -> List[Empresa]:
         """Faz a busca real na API Nuvem Fiscal"""
@@ -395,13 +418,17 @@ class EmpresaService:
                 'Content-Type': 'application/json'
             }
             
-            # Parâmetros da busca
+            # Parâmetros da busca (tentar selecionar campos de endereço e contato)
             params = {
                 'cnae_principal': cnae,
                 'municipio': municipio,
-                'natureza_juridica': '2062',  # Sociedade Empresária Limitada
-                '$top': limite
+                '$top': limite,
+                '$select': 'cnpj,razao_social,nome_fantasia,logradouro,numero,bairro,municipio,uf,cep,telefone,email,cnae_principal,cnae_principal_descricao,porte,situacao_cadastral,data_abertura'
             }
+            # naturezas jurídicas podem ser restritivas; enviar padrão 2062 (Ltda) se não configurado
+            natureza_config = os.getenv('NUVEM_FISCAL_FILTER_NATUREZA', '2062')
+            if natureza_config:
+                params['natureza_juridica'] = natureza_config
             
             self._rate_limit()
             response = self.session.get(
@@ -414,41 +441,95 @@ class EmpresaService:
             if response.status_code == 200:
                 data = response.json()
                 empresas = []
-                
+
                 for item in data.get('data', []):
-                    # Converter dados da Nuvem Fiscal para nosso modelo
+                    # Normalizações de campos vindos como objetos
+                    situacao = item.get('situacao_cadastral')
+                    if isinstance(situacao, dict):
+                        situacao_cadastral = situacao.get('descricao') or situacao.get('codigo') or ''
+                    else:
+                        situacao_cadastral = situacao or ''
+
+                    porte_val = item.get('porte')
+                    if isinstance(porte_val, dict):
+                        porte = porte_val.get('descricao') or porte_val.get('codigo') or ''
+                    else:
+                        porte = porte_val or ''
+
+                    # Endereço pode não vir na listagem; tentar montar com o que houver
                     endereco = Endereco(
-                        logradouro=item.get('logradouro'),
-                        numero=item.get('numero'),
-                        bairro=item.get('bairro'),
-                        cidade=item.get('municipio'),
-                        uf=item.get('uf'),
-                        cep=item.get('cep')
+                        logradouro=item.get('logradouro') or '',
+                        numero=item.get('numero') or '',
+                        bairro=item.get('bairro') or '',
+                        cidade=item.get('municipio') or '',
+                        uf=item.get('uf') or '',
+                        cep=item.get('cep') or ''
                     )
-                    
+
+                    # CNAE principal
+                    cnae_codigo = item.get('cnae_principal')
+                    cnae_desc = item.get('cnae_principal_descricao', '')
                     cnae_obj = CNAE(
-                        codigo=item.get('cnae_principal'),
-                        descricao=item.get('cnae_principal_descricao', ''),
+                        codigo=cnae_codigo,
+                        descricao=cnae_desc,
                         principal=True
-                    )
-                    
+                    ) if cnae_codigo else None
+
+                    # Datas
+                    data_abertura = None
+                    for key in ['data_abertura', 'data_inicio_atividade']:
+                        if item.get(key):
+                            try:
+                                data_abertura = datetime.strptime(item.get(key), '%Y-%m-%d')
+                                break
+                            except Exception:
+                                pass
+
+                    # Contatos
+                    telefone = item.get('telefone') or item.get('ddd_telefone_1') or ''
+                    email = item.get('email') or ''
+
+                    cnpj_limpo = (item.get('cnpj') or '').replace('.', '').replace('/', '').replace('-', '')
+
                     empresa = Empresa(
-                        cnpj=item.get('cnpj', '').replace('.', '').replace('/', '').replace('-', ''),
+                        cnpj=cnpj_limpo,
                         razao_social=item.get('razao_social', ''),
                         nome_fantasia=item.get('nome_fantasia'),
-                        situacao_cadastral=item.get('situacao_cadastral'),
-                        data_abertura=datetime.strptime(item.get('data_abertura'), '%Y-%m-%d') if item.get('data_abertura') else None,
-                        porte=item.get('porte'),
-                        natureza_juridica=item.get('natureza_juridica'),
+                        situacao_cadastral=situacao_cadastral,
+                        data_abertura=data_abertura,
+                        porte=porte,
+                        natureza_juridica=(item.get('natureza_juridica') or ''),
                         endereco=endereco,
                         cnae_principal=cnae_obj,
-                        telefone=item.get('telefone'),
-                        email=item.get('email'),
+                        telefone=telefone,
+                        email=email,
                         fonte="Nuvem Fiscal"
                     )
-                    
+
+                    # Enriquecer com detalhe se endereço veio vazio
+                    if not (empresa.endereco and (empresa.endereco.logradouro or empresa.endereco.cidade or empresa.endereco.cep)):
+                        detalhe = self._consultar_cnpj_individual_nuvem_fiscal(token, cnpj_limpo)
+                        if detalhe and detalhe.endereco:
+                            empresa.endereco = detalhe.endereco
+                        if detalhe and detalhe.cnae_principal and not empresa.cnae_principal:
+                            empresa.cnae_principal = detalhe.cnae_principal
+                        if detalhe and not empresa.email:
+                            empresa.email = detalhe.email
+                        if detalhe and not empresa.telefone:
+                            empresa.telefone = detalhe.telefone
+
+                    # Fallback extra: tentar BrasilAPI para completar endereço
+                    if not (empresa.endereco and (empresa.endereco.logradouro or empresa.endereco.cidade or empresa.endereco.cep)):
+                        endereco_fb, email_fb, fone_fb = self._consultar_cnpj_brasilapi(cnpj_limpo)
+                        if endereco_fb:
+                            empresa.endereco = endereco_fb
+                        if (not empresa.email) and email_fb:
+                            empresa.email = email_fb
+                        if (not empresa.telefone) and fone_fb:
+                            empresa.telefone = fone_fb
+
                     empresas.append(empresa)
-                
+
                 return empresas
                 
             else:
@@ -487,15 +568,21 @@ class EmpresaService:
                 try:
                     empresa = self._consultar_cnpj_individual_nuvem_fiscal(token, cnpj)
                     if empresa:
-                        # Filtrar por CNAE se necessário
-                        if cnae in empresa.cnae_principal.codigo.replace("-", "").replace("/", ""):
-                            empresas.append(empresa)
-                            logger.info(f"CNPJ {cnpj} adicionado - {empresa.razao_social}")
+                        # Filtrar por CNAE se disponível; se não houver CNAE no retorno, aceitar como válido
+                        if getattr(empresa, 'cnae_principal', None) and getattr(empresa.cnae_principal, 'codigo', None):
+                            codigo_normalizado = empresa.cnae_principal.codigo.replace("-", "").replace("/", "")
+                            if cnae in codigo_normalizado:
+                                empresas.append(empresa)
+                                logger.info(f"CNPJ {cnpj} adicionado - {empresa.razao_social}")
+                            else:
+                                logger.info(f"CNPJ {cnpj} não tem CNAE {cnae}")
                         else:
-                            logger.info(f"CNPJ {cnpj} não tem CNAE {cnae}")
+                            # Sem CNAE no payload; incluir para não descartar dados reais
+                            empresas.append(empresa)
+                            logger.info(f"CNPJ {cnpj} adicionado (sem CNAE no retorno) - {empresa.razao_social}")
                     else:
                         logger.warning(f"CNPJ {cnpj} não retornou dados")
-                        
+
                 except Exception as e:
                     logger.error(f"Erro ao consultar CNPJ {cnpj}: {e}")
                     continue
@@ -571,6 +658,31 @@ class EmpresaService:
         except Exception as e:
             logger.error(f"Erro ao consultar CNPJ {cnpj}: {e}")
             return None
+
+    def _consultar_cnpj_brasilapi(self, cnpj: str):
+        """Consulta dados de CNPJ na BrasilAPI para complementar endereço/contatos"""
+        try:
+            self._rate_limit()
+            url = f"https://brasilapi.com.br/api/cnpj/v1/{cnpj}"
+            response = self.session.get(url, timeout=self.settings.REQUEST_TIMEOUT)
+            if response.status_code == 200:
+                data = response.json()
+                from src.models.empresa import Endereco
+                endereco = Endereco(
+                    logradouro=data.get('logradouro') or data.get('descricao_tipo_de_logradouro') or '',
+                    numero=(data.get('numero') or ''),
+                    bairro=data.get('bairro') or '',
+                    cidade=data.get('municipio') or data.get('cidade') or '',
+                    uf=data.get('uf') or '',
+                    cep=(data.get('cep') or '').replace('-', '')
+                )
+                email = data.get('email') or ''
+                telefone = data.get('ddd_telefone_1') or data.get('ddd_telefone_2') or ''
+                return endereco, email, telefone
+            else:
+                return None, None, None
+        except Exception:
+            return None, None, None
     
     def _buscar_via_cnpj_ws(self, cnae: str, uf: str, cidade: str, limite: int) -> List[Empresa]:
         """Busca empresas via API CNPJ.ws (freemium)"""
