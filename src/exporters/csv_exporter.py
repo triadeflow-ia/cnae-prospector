@@ -89,6 +89,9 @@ class CSVExporter:
                     
                     # Informações Adicionais
                     "Capital Social",
+                    "Website",
+                    "Telefone Validado",
+                    "Validação Telefone",
                     "Fonte dos Dados",
                     "Data da Consulta",
                     
