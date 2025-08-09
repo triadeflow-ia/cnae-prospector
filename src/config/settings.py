@@ -91,19 +91,20 @@ class Settings:
         """Valida as configurações essenciais"""
         # Validação mais flexível - não falha se as variáveis não estiverem configuradas
         warnings = []
-        
-        if not self.RAPIDAPI_KEY:
-            warnings.append("RAPIDAPI_KEY não configurada - usando dados demonstrativos")
-        
-        if self.RAPIDAPI_KEY == "sua_chave_aqui":
-            warnings.append("RAPIDAPI_KEY ainda está com o valor padrão - usando dados demonstrativos")
+
+        # Avisos sobre RapidAPI apenas se o enriquecimento estiver habilitado
+        if self.ENABLE_RAPIDAPI_ENRICHMENT:
+            if not self.RAPIDAPI_KEY:
+                warnings.append("RAPIDAPI_KEY não configurada - enriquecimento RapidAPI ficará desativado")
+            elif self.RAPIDAPI_KEY == "sua_chave_aqui":
+                warnings.append("RAPIDAPI_KEY ainda está com o valor padrão - enriquecimento RapidAPI ficará desativado")
         
         # Apenas mostra warnings, não falha
         if warnings:
             print("⚠️ Configurações:")
             for warning in warnings:
                 print(f"   {warning}")
-            print("   O sistema funcionará com dados demonstrativos")
+            print("   O sistema usará Nuvem Fiscal normalmente; RapidAPI é opcional")
     
     def get_api_headers(self) -> dict:
         """Retorna os headers para requisições à API"""
