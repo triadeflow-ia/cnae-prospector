@@ -18,6 +18,10 @@ class EmailValidationService:
         self.settings = settings
         self.enabled = bool(settings.ENABLE_EMAIL_VALIDATION and settings.EMAIL_VALIDATION_API_KEY)
         self.session = requests.Session()
+        self._cache: dict[str, tuple[dict, float]] = {}
+        self._cache_ttl_seconds: int = 24 * 3600
+        self._last_request_ts: float | None = None
+        self._min_interval_seconds: float = 0.2  # ~5 QPS máx
 
     def validate(self, email: Optional[str]) -> Dict[str, str]:
         if not email:
@@ -30,13 +34,35 @@ class EmailValidationService:
             return {"email_validacao": "offline"}
 
         try:
+            # Cache first
+            import time
+            now = time.time()
+            cached = self._cache.get(email)
+            if cached and (now - cached[1] < self._cache_ttl_seconds):
+                return cached[0]
+
+            # Basic QPS throttle
+            if self._last_request_ts is not None:
+                elapsed = now - self._last_request_ts
+                if elapsed < self._min_interval_seconds:
+                    time.sleep(self._min_interval_seconds - elapsed)
+            self._last_request_ts = time.time()
+
             url = (
                 "https://emailvalidation.abstractapi.com/v1/?api_key="
                 f"{self.settings.EMAIL_VALIDATION_API_KEY}&email={email}"
             )
-            r = self.session.get(url, timeout=self.settings.REQUEST_TIMEOUT)
+            # Retry/backoff on 429/5xx
+            for attempt in range(3):
+                r = self.session.get(url, timeout=self.settings.REQUEST_TIMEOUT)
+                if r.status_code not in (429, 500, 502, 503, 504):
+                    break
+                backoff = (2 ** attempt) * 0.5
+                time.sleep(backoff)
             if r.status_code != 200:
-                return {"email_validacao": f"erro http {r.status_code}"}
+                result = {"email_validacao": f"erro http {r.status_code}"}
+                self._cache[email] = (result, time.time())
+                return result
             data = r.json()
             # deliverability: DELIVERABLE / UNDELIVERABLE / RISKY / UNKNOWN
             deliver = (data.get("deliverability") or "").lower()
@@ -47,6 +73,7 @@ class EmailValidationService:
             res = {"email_validacao": status}
             if suggestion:
                 res["email_sugestao"] = suggestion
+            self._cache[email] = (res, time.time())
             return res
         except Exception as e:
             logger.error(f"Email validation error: {e}")
