@@ -88,11 +88,11 @@ class ExcelExporter:
         dados = [empresa.to_excel_row() for empresa in empresas]
         
         # Criar DataFrame
-            df = pd.DataFrame(dados)
-            # Incluir colunas de enriquecimento se existirem
-            for extra in ["Website", "Telefone Validado", "Validação Telefone"]:
-                if extra not in df.columns:
-                    df[extra] = ""
+        df = pd.DataFrame(dados)
+        # Incluir colunas de enriquecimento se existirem
+        for extra in ["Website", "Telefone Validado", "Validação Telefone"]:
+            if extra not in df.columns:
+                df[extra] = ""
         
         # Reordenar colunas se necessário
         colunas_ordem = [
