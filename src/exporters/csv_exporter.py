@@ -92,6 +92,8 @@ class CSVExporter:
                     "Website",
                     "Telefone Validado",
                     "Validação Telefone",
+                    "Email Validação",
+                    "Email Sugestão",
                     "Fonte dos Dados",
                     "Data da Consulta",
                     
@@ -232,7 +234,9 @@ class CSVExporter:
                     "Website": getattr(empresa, 'website', ''),
                     "Telefone Validado": getattr(empresa, 'telefone_validado', ''),
                     "Validação Telefone": getattr(empresa, 'validacao_telefone', ''),
-            "Fonte dos Dados": getattr(empresa, 'fonte', 'CNAE Prospector'),
+                    "Fonte dos Dados": getattr(empresa, 'fonte', 'CNAE Prospector'),
+                    "Email Validação": getattr(empresa, 'email_validacao', ''),
+                    "Email Sugestão": getattr(empresa, 'email_sugestao', ''),
             "Data da Consulta": datetime.now().strftime("%d/%m/%Y %H:%M"),
             
             # Campos para CRM (vazios para preenchimento manual)

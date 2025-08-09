@@ -266,7 +266,7 @@ class GoogleSheetsExporter:
                 "Setor (CNAE)", "Atividade Principal", "Porte Empresa", "Data Abertura",
                 "Telefone Principal", "Email Contato", "Endereço Completo",
                 "Rua", "Número", "Bairro", "Cidade", "Estado (UF)", "CEP",
-                "Capital Social", "Website", "Telefone Validado", "Validação Telefone", "Fonte dos Dados", "Data da Consulta",
+                "Capital Social", "Website", "Telefone Validado", "Validação Telefone", "Email Validação", "Email Sugestão", "Fonte dos Dados", "Data da Consulta",
                 "Lead Score", "Observações", "Responsável", "Status Contato"
             ]
             
@@ -373,6 +373,8 @@ class GoogleSheetsExporter:
                 "Website": getattr(empresa, 'website', ''),
                 "Telefone Validado": getattr(empresa, 'telefone_validado', ''),
                 "Validação Telefone": getattr(empresa, 'validacao_telefone', ''),
+                "Email Validação": getattr(empresa, 'email_validacao', ''),
+                "Email Sugestão": getattr(empresa, 'email_sugestao', ''),
                 "Fonte dos Dados": getattr(empresa, 'fonte', 'CNAE Prospector'),
                 "Data da Consulta": datetime.now().strftime("%d/%m/%Y %H:%M"),
                 "Lead Score": lead_score,

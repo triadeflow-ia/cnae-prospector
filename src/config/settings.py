@@ -51,6 +51,10 @@ class Settings:
         self.ENABLE_PHONE_VALIDATION = os.getenv("ENABLE_PHONE_VALIDATION", "false").lower() == "true"
         self.PHONE_VALIDATION_API_KEY = os.getenv("PHONE_VALIDATION_API_KEY", "")
         self.PHONE_VALIDATION_PROVIDER = os.getenv("PHONE_VALIDATION_PROVIDER", "numverify").lower()
+
+        # Enriquecimento Camada 2 - Email (opcional)
+        self.ENABLE_EMAIL_VALIDATION = os.getenv("ENABLE_EMAIL_VALIDATION", "false").lower() == "true"
+        self.EMAIL_VALIDATION_API_KEY = os.getenv("EMAIL_VALIDATION_API_KEY", "")
         
         # Google Sheets (opcional)
         self.GOOGLE_SHEETS_CREDENTIALS_PATH = os.getenv(
@@ -111,6 +115,8 @@ class Settings:
             warnings.append("GOOGLE_PLACES_API_KEY não configurada - Places ficará desativado")
         if self.ENABLE_PHONE_VALIDATION and not self.PHONE_VALIDATION_API_KEY:
             warnings.append("PHONE_VALIDATION_API_KEY não configurada - Validação de telefone ficará desativada")
+        if self.ENABLE_EMAIL_VALIDATION and not self.EMAIL_VALIDATION_API_KEY:
+            warnings.append("EMAIL_VALIDATION_API_KEY não configurada - Validação de e-mail ficará desativada")
         
         # Apenas mostra warnings, não falha
         if warnings:

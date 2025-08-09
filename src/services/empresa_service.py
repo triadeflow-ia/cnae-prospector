@@ -15,6 +15,7 @@ from src.utils.logger import setup_logger
 from .rapidapi_enrichment import RapidAPIEnrichmentService
 from .places_service import GooglePlacesService
 from .phone_validation_service import PhoneValidationService
+from .email_validation_service import EmailValidationService
 
 logger = setup_logger(__name__)
 
@@ -33,6 +34,7 @@ class EmpresaService:
         self._rapid_enrich = RapidAPIEnrichmentService(settings) if (settings.ENABLE_RAPIDAPI_ENRICHMENT and settings.RAPIDAPI_ENABLED) else None
         self._places = GooglePlacesService(settings)
         self._phone_validator = PhoneValidationService(settings)
+        self._email_validator = EmailValidationService(settings)
     
     def _rate_limit(self):
         """Implementa rate limiting para evitar exceder limites da API"""
@@ -556,6 +558,14 @@ class EmpresaService:
                             setattr(empresa, "telefone_validado", pv["telefone_validado"])  # para export
                         if pv.get("validacao_telefone"):
                             setattr(empresa, "validacao_telefone", pv["validacao_telefone"])  # para export
+
+                    # Camada 2: Validação de e-mail (opcional)
+                    if self._email_validator.enabled and empresa.email:
+                        ev = self._email_validator.validate(empresa.email)
+                        if ev.get("email_validacao"):
+                            setattr(empresa, "email_validacao", ev["email_validacao"])  # para export
+                        if ev.get("email_sugestao"):
+                            setattr(empresa, "email_sugestao", ev["email_sugestao"])  # para export
 
                     empresas.append(empresa)
 
