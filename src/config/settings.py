@@ -55,6 +55,10 @@ class Settings:
         # Enriquecimento Camada 2 - Email (opcional)
         self.ENABLE_EMAIL_VALIDATION = os.getenv("ENABLE_EMAIL_VALIDATION", "false").lower() == "true"
         self.EMAIL_VALIDATION_API_KEY = os.getenv("EMAIL_VALIDATION_API_KEY", "")
+
+        # Enriquecimento Camada 2 - Company Enrichment (opcional)
+        self.ENABLE_COMPANY_ENRICHMENT = os.getenv("ENABLE_COMPANY_ENRICHMENT", "false").lower() == "true"
+        self.COMPANY_ENRICHMENT_API_KEY = os.getenv("COMPANY_ENRICHMENT_API_KEY", "")
         
         # Google Sheets (opcional)
         self.GOOGLE_SHEETS_CREDENTIALS_PATH = os.getenv(
@@ -117,6 +121,8 @@ class Settings:
             warnings.append("PHONE_VALIDATION_API_KEY não configurada - Validação de telefone ficará desativada")
         if self.ENABLE_EMAIL_VALIDATION and not self.EMAIL_VALIDATION_API_KEY:
             warnings.append("EMAIL_VALIDATION_API_KEY não configurada - Validação de e-mail ficará desativada")
+        if self.ENABLE_COMPANY_ENRICHMENT and not self.COMPANY_ENRICHMENT_API_KEY:
+            warnings.append("COMPANY_ENRICHMENT_API_KEY não configurada - Enriquecimento de empresa ficará desativado")
         
         # Apenas mostra warnings, não falha
         if warnings:

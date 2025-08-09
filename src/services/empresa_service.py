@@ -16,6 +16,7 @@ from .rapidapi_enrichment import RapidAPIEnrichmentService
 from .places_service import GooglePlacesService
 from .phone_validation_service import PhoneValidationService
 from .email_validation_service import EmailValidationService
+from .company_enrichment_service import CompanyEnrichmentService
 
 logger = setup_logger(__name__)
 
@@ -35,6 +36,7 @@ class EmpresaService:
         self._places = GooglePlacesService(settings)
         self._phone_validator = PhoneValidationService(settings)
         self._email_validator = EmailValidationService(settings)
+        self._company_enrich = CompanyEnrichmentService(settings)
     
     def _rate_limit(self):
         """Implementa rate limiting para evitar exceder limites da API"""
@@ -566,6 +568,21 @@ class EmpresaService:
                             setattr(empresa, "email_validacao", ev["email_validacao"])  # para export
                         if ev.get("email_sugestao"):
                             setattr(empresa, "email_sugestao", ev["email_sugestao"])  # para export
+
+                    # Camada 2: Company enrichment por domínio (opcional)
+                    if self._company_enrich.enabled:
+                        # Obter domínio a partir do website, se houver
+                        website = getattr(empresa, "website", "") or ""
+                        domain = ""
+                        if website:
+                            try:
+                                domain = website.replace("https://", "").replace("http://", "").split("/")[0]
+                            except Exception:
+                                domain = ""
+                        if domain:
+                            ce = self._company_enrich.enrich(domain)
+                            for k, v in ce.items():
+                                setattr(empresa, k, v)
 
                     empresas.append(empresa)
 
