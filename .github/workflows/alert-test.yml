@@ -30,6 +30,7 @@ jobs:
           ZAPI_INSTANCE_ID: ${{ secrets.ZAPI_INSTANCE_ID }}
           ZAPI_TOKEN: ${{ secrets.ZAPI_TOKEN }}
           ZAPI_DEFAULT_TO: ${{ secrets.ZAPI_TO }}
+          ZAPI_CLIENT_TOKEN: ${{ secrets.ZAPI_CLIENT_TOKEN }}
           MESSAGE: ${{ inputs.message }}
           PHONE_OVERRIDE: ${{ inputs.phone_override }}
         run: |
@@ -40,8 +41,9 @@ jobs:
           if [ -z "${TO}" ]; then echo "Destination phone not set."; exit 1; fi
           BODY=$(jq -nc --arg phone "$TO" --arg message "$MESSAGE" '{phone:$phone, message:$message}')
           echo "Sending to $TO"
-          curl -sS -X POST \
-            -H 'Content-Type: application/json' \
+          HEADERS=(-H 'Content-Type: application/json')
+          if [ -n "${ZAPI_CLIENT_TOKEN}" ]; then HEADERS+=( -H "Client-Token: ${ZAPI_CLIENT_TOKEN}" ); fi
+          curl -sS -X POST "${HEADERS[@]}" \
             -d "$BODY" \
             "https://api.z-api.io/instances/${ZAPI_INSTANCE_ID}/token/${ZAPI_TOKEN}/send-text" || true
 
