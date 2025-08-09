@@ -42,6 +42,8 @@ class Settings:
         self.RAPIDAPI_HOST = (
             raw_host.replace("https://", "").replace("http://", "").split("/")[0]
         )
+        # Enriquecimento opcional via RapidAPI
+        self.ENABLE_RAPIDAPI_ENRICHMENT = os.getenv("ENABLE_RAPIDAPI_ENRICHMENT", "false").lower() == "true"
         
         # Google Sheets (opcional)
         self.GOOGLE_SHEETS_CREDENTIALS_PATH = os.getenv(
@@ -109,6 +111,10 @@ class Settings:
             "X-RapidAPI-Key": self.RAPIDAPI_KEY,
             "X-RapidAPI-Host": self.RAPIDAPI_HOST
         }
+
+    @property
+    def RAPIDAPI_ENABLED(self) -> bool:
+        return bool(self.RAPIDAPI_KEY and self.RAPIDAPI_BASE_URL and self.RAPIDAPI_HOST)
     
     def get_export_path(self, filename: str, formato: str = "excel") -> Path:
         """

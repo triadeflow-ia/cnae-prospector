@@ -12,6 +12,7 @@ from datetime import datetime, timedelta
 from src.config.settings import Settings
 from src.models.empresa import Empresa
 from src.utils.logger import setup_logger
+from .rapidapi_enrichment import RapidAPIEnrichmentService
 
 logger = setup_logger(__name__)
 
@@ -26,6 +27,8 @@ class EmpresaService:
         self._last_request_time = None
         self._request_count = 0
         self._cache = {} if settings.CACHE_ENABLED else None
+        # Serviço opcional de enriquecimento
+        self._rapid_enrich = RapidAPIEnrichmentService(settings) if (settings.ENABLE_RAPIDAPI_ENRICHMENT and settings.RAPIDAPI_ENABLED) else None
     
     def _rate_limit(self):
         """Implementa rate limiting para evitar exceder limites da API"""
@@ -528,6 +531,9 @@ class EmpresaService:
                         if (not empresa.telefone) and fone_fb:
                             empresa.telefone = fone_fb
 
+                    # Enriquecimento opcional via RapidAPI (duplo check)
+                    if self._rapid_enrich:
+                        empresa = self._rapid_enrich.enrich_empresa_by_cnpj(empresa)
                     empresas.append(empresa)
 
                 return empresas

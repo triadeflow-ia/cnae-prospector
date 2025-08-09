@@ -73,6 +73,24 @@ cp .env.example .env
 2. **BrasilAPI** (fallback gratuito para enriquecimento de endereço)
    - Sem necessidade de configuração (usada automaticamente quando faltar endereço)
 
+### Enriquecimento via RapidAPI (Duplo Check)
+
+Opcional: habilita validação/complemento por CNPJ após a busca na Nuvem Fiscal.
+
+1) Ative no `.env`:
+
+```
+ENABLE_RAPIDAPI_ENRICHMENT=true
+RAPIDAPI_KEY=coloque_sua_chave
+RAPIDAPI_HOST=dados-cnpj.p.rapidapi.com
+RAPIDAPI_BASE_URL=https://dados-cnpj.p.rapidapi.com/buscar-base.php
+```
+
+2) Funcionamento:
+- Para cada CNPJ encontrado, consulta a API configurada no RapidAPI.
+- Preenche apenas campos faltantes (endereço, telefone, e-mail, CNAE) quando disponíveis.
+- Em caso de erro/limite da API, o fluxo principal segue normalmente.
+
 ### Google Sheets (Opcional)
 
 Para integração com Google Sheets:
@@ -88,6 +106,9 @@ Para integração com Google Sheets:
 ### Linha de Comando
 
 ```bash
+# CLI direta (src/main.py)
+python src/main.py buscar "5611-2/01" --uf "SP" --cidade "São Paulo" --limite 50 --formato csv --sheets
+
 # Busca básica por CNAE
 python run_production.py --cnae "5611-2/01" --limite 50
 
@@ -100,6 +121,11 @@ python run_production.py --cnae "5611-2/01" --uf "MG" --cidade "Uberlândia" --s
 # Formato Excel
 python run_production.py --cnae "5611-2/01" --formato excel --limite 30
 ```
+
+#### Habilitar/Desabilitar o "Duplo Check" (RapidAPI)
+
+- Para ligar: defina `ENABLE_RAPIDAPI_ENRICHMENT=true` no `.env` e configure `RAPIDAPI_KEY`, `RAPIDAPI_HOST`, `RAPIDAPI_BASE_URL`.
+- Para desligar: defina `ENABLE_RAPIDAPI_ENRICHMENT=false` (o fluxo principal via Nuvem Fiscal continuará funcionando normalmente).
 
 ### Interface Programática
 

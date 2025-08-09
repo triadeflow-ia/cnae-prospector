@@ -7,7 +7,7 @@ import os
 import json
 
 def main():
-    print("🚀 PREPARANDO PROJETO PARA RAILWAY")
+    print("PREPARANDO PROJETO PARA RAILWAY")
     print("=" * 40)
     
     # 1. Verificar arquivos necessários
