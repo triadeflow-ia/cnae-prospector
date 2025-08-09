@@ -1,0 +1,31 @@
+name: Uptime Monitor
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  healthcheck:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check production health endpoint
+        env:
+          PROD_HEALTH_URL: https://cnae-prospector-production.up.railway.app/health
+        run: |
+          set -e
+          URL="${PROD_HEALTH_URL}"
+          echo "Checking ${URL}"
+          for i in 1 2 3; do
+            CODE=$(curl -sS -m 15 -w '%{http_code}' -o resp.json "${URL}" || true)
+            echo "HTTP ${CODE}"
+            cat resp.json || true
+            if [ "${CODE}" = "200" ] && grep -q '"status"\s*:\s*"ok"' resp.json; then
+              echo "Health OK"
+              exit 0
+            fi;
+            echo "Retry ${i}..."; sleep 10
+          done
+          echo "Health check failed"
+          exit 1
+
