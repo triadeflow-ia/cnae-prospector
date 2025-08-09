@@ -174,7 +174,10 @@ class Empresa:
             "Capital Social": self.capital_social_formatado,
             "CNAE Principal": f"{self.cnae_principal.codigo} - {self.cnae_principal.descricao}" if self.cnae_principal else "",
             "Telefone": self.telefone_formatado,
+            "Telefone Validado": getattr(self, 'telefone_validado', ""),
+            "Validação Telefone": getattr(self, 'validacao_telefone', ""),
             "Email": self.email or "",
+            "Website": getattr(self, 'website', ""),
         }
         
         # Adicionar campos de endereço

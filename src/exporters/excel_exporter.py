@@ -88,13 +88,17 @@ class ExcelExporter:
         dados = [empresa.to_excel_row() for empresa in empresas]
         
         # Criar DataFrame
-        df = pd.DataFrame(dados)
+            df = pd.DataFrame(dados)
+            # Incluir colunas de enriquecimento se existirem
+            for extra in ["Website", "Telefone Validado", "Validação Telefone"]:
+                if extra not in df.columns:
+                    df[extra] = ""
         
         # Reordenar colunas se necessário
         colunas_ordem = [
             "CNPJ", "Razão Social", "Nome Fantasia", "Situação",
             "Data Abertura", "Porte", "Capital Social", "CNAE Principal",
-            "Telefone", "Email", "Logradouro", "Número", "Complemento",
+            "Telefone", "Telefone Validado", "Validação Telefone", "Email", "Website", "Logradouro", "Número", "Complemento",
             "Bairro", "Cidade", "UF", "CEP"
         ]
         

@@ -44,6 +44,13 @@ class Settings:
         )
         # Enriquecimento opcional via RapidAPI
         self.ENABLE_RAPIDAPI_ENRICHMENT = os.getenv("ENABLE_RAPIDAPI_ENRICHMENT", "false").lower() == "true"
+
+        # Enriquecimento Camada 1 (opcional)
+        self.ENABLE_PLACES = os.getenv("ENABLE_PLACES", "false").lower() == "true"
+        self.GOOGLE_PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")
+        self.ENABLE_PHONE_VALIDATION = os.getenv("ENABLE_PHONE_VALIDATION", "false").lower() == "true"
+        self.PHONE_VALIDATION_API_KEY = os.getenv("PHONE_VALIDATION_API_KEY", "")
+        self.PHONE_VALIDATION_PROVIDER = os.getenv("PHONE_VALIDATION_PROVIDER", "numverify").lower()
         
         # Google Sheets (opcional)
         self.GOOGLE_SHEETS_CREDENTIALS_PATH = os.getenv(
@@ -98,6 +105,12 @@ class Settings:
                 warnings.append("RAPIDAPI_KEY não configurada - enriquecimento RapidAPI ficará desativado")
             elif self.RAPIDAPI_KEY == "sua_chave_aqui":
                 warnings.append("RAPIDAPI_KEY ainda está com o valor padrão - enriquecimento RapidAPI ficará desativado")
+
+        # Avisos opcionais para Camada 1
+        if self.ENABLE_PLACES and not self.GOOGLE_PLACES_API_KEY:
+            warnings.append("GOOGLE_PLACES_API_KEY não configurada - Places ficará desativado")
+        if self.ENABLE_PHONE_VALIDATION and not self.PHONE_VALIDATION_API_KEY:
+            warnings.append("PHONE_VALIDATION_API_KEY não configurada - Validação de telefone ficará desativada")
         
         # Apenas mostra warnings, não falha
         if warnings:

@@ -266,7 +266,7 @@ class GoogleSheetsExporter:
                 "Setor (CNAE)", "Atividade Principal", "Porte Empresa", "Data Abertura",
                 "Telefone Principal", "Email Contato", "Endereço Completo",
                 "Rua", "Número", "Bairro", "Cidade", "Estado (UF)", "CEP",
-                "Capital Social", "Fonte dos Dados", "Data da Consulta",
+                "Capital Social", "Website", "Telefone Validado", "Validação Telefone", "Fonte dos Dados", "Data da Consulta",
                 "Lead Score", "Observações", "Responsável", "Status Contato"
             ]
             

@@ -39,3 +39,6 @@ pydantic==2.5.3
 # Flask web framework
 flask==3.0.0
 flask-cors==4.0.0
+
+# ===== ENRICHMENT LAYER 1 (optional) =====
+# Uses requests; no extra deps required
