@@ -21,6 +21,8 @@ class GoogleSheetsExporter:
     def __init__(self):
         self.settings = Settings()
         self.client = None
+        self.last_error: str | None = None
+        self.service_account_email: str | None = None
         self._setup_client()
     
     def _setup_client(self):
@@ -43,34 +45,42 @@ class GoogleSheetsExporter:
                     decoded = base64.b64decode(raw_b64)
                     info = json.loads(decoded)
                     credentials = Credentials.from_service_account_info(info, scopes=scope)
+                    self.service_account_email = getattr(credentials, 'service_account_email', None)
                 except Exception as e:
-                    logger.error(f"Credenciais BASE64 inválidas em GOOGLE_SHEETS_CREDENTIALS_B64: {e}")
+                    self.last_error = f"Credenciais BASE64 inválidas em GOOGLE_SHEETS_CREDENTIALS_B64: {e}"
+                    logger.error(self.last_error)
                     return
             elif raw_json:
                 try:
                     info = json.loads(raw_json)
                     credentials = Credentials.from_service_account_info(info, scopes=scope)
+                    self.service_account_email = getattr(credentials, 'service_account_email', None)
                 except Exception as e:
-                    logger.error(f"Credenciais JSON inválidas em GOOGLE_SHEETS_CREDENTIALS_JSON: {e}")
+                    self.last_error = f"Credenciais JSON inválidas em GOOGLE_SHEETS_CREDENTIALS_JSON: {e}"
+                    logger.error(self.last_error)
                     return
             else:
                 # Carregar de arquivo local
                 if not os.path.exists(credentials_path):
-                    logger.error(f"Arquivo de credenciais não encontrado: {credentials_path}")
+                    self.last_error = f"Arquivo de credenciais não encontrado: {credentials_path}"
+                    logger.error(self.last_error)
                     return
                 credentials = Credentials.from_service_account_file(
                     credentials_path,
                     scopes=scope
                 )
+                self.service_account_email = getattr(credentials, 'service_account_email', None)
             
             # Cria o cliente
             self.client = gspread.authorize(credentials)
             logger.info("Cliente Google Sheets configurado com sucesso")
             
         except GoogleAuthError as e:
-            logger.error(f"Erro na autenticação Google: {e}")
+            self.last_error = f"Erro na autenticação Google: {e}"
+            logger.error(self.last_error)
         except Exception as e:
-            logger.error(f"Erro ao configurar Google Sheets: {e}")
+            self.last_error = f"Erro ao configurar Google Sheets: {e}"
+            logger.error(self.last_error)
     
     def export(self, empresas: List[Empresa], filename: str = None) -> str:
         """
@@ -126,7 +136,8 @@ class GoogleSheetsExporter:
             return spreadsheet.url
             
         except Exception as e:
-            logger.error(f"Erro ao exportar para Google Sheets: {e}")
+            self.last_error = f"Erro ao exportar para Google Sheets: {e}"
+            logger.error(self.last_error)
             return ""
     
     def update_existing_sheet(self, empresas: List[Empresa], spreadsheet_name: str = None) -> str:
@@ -175,7 +186,8 @@ class GoogleSheetsExporter:
             return spreadsheet.url
             
         except Exception as e:
-            logger.error(f"Erro ao atualizar Google Sheets: {e}")
+            self.last_error = f"Erro ao atualizar Google Sheets: {e}"
+            logger.error(self.last_error)
             return ""
     
     def create_or_update_sheet(self, empresas: List[Empresa], spreadsheet_name: str = None) -> str:
@@ -200,7 +212,8 @@ class GoogleSheetsExporter:
             # Cria uma nova planilha
             return self.export(empresas, spreadsheet_name)
         except Exception as e:
-            logger.error(f"Erro ao criar/atualizar planilha: {e}")
+            self.last_error = f"Erro ao criar/atualizar planilha: {e}"
+            logger.error(self.last_error)
             return ""
     
     def export_to_specific_sheet(self, empresas: List[Empresa], sheet_id: str = None, clear_first: bool = False) -> str:
@@ -297,7 +310,8 @@ class GoogleSheetsExporter:
             return spreadsheet.url
             
         except Exception as e:
-            logger.error(f"Erro ao exportar para planilha específica: {e}")
+            self.last_error = f"Erro ao exportar para planilha específica: {e}"
+            logger.error(self.last_error)
             import traceback
             logger.error(f"Traceback: {traceback.format_exc()}")
             return ""

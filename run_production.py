@@ -213,15 +213,30 @@ def run_api_server(host='127.0.0.1', port=8000):
                     pass
 
                 # Se export_result for uma URL (Sheets), retorná-la em sheets_url
+                # export_result é URL do Sheets quando sheets=on e houve sucesso
                 sheets_url = export_result if (sheets and isinstance(export_result, str) and export_result.startswith('http')) else None
 
-                return jsonify({
+                resp = {
                     "success": True,
                     "count": count,
                     "filename": filename,
                     "file_url": f"/download/{filename}",
                     "sheets_url": sheets_url
-                })
+                }
+
+                # Expor motivo do erro de sheets (apenas para debug leve)
+                if sheets and sheets_url is None:
+                    try:
+                        from src.exporters.sheets_exporter import GoogleSheetsExporter
+                        exporter = GoogleSheetsExporter()
+                        if exporter.last_error:
+                            resp["sheets_error"] = exporter.last_error
+                        if exporter.service_account_email:
+                            resp["sheets_service_account"] = exporter.service_account_email
+                    except Exception:
+                        pass
+
+                return jsonify(resp)
                 
             except Exception as e:
                 return jsonify({"success": False, "error": str(e)})
