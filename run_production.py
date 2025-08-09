@@ -12,6 +12,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 
 from main import main as cli_main
+from main import CNAEProspector
 
 
 def run_production_search(cnae, uf=None, cidade=None, limite=100, formato='csv', sheets=False):
@@ -184,35 +185,26 @@ def run_api_server(host='127.0.0.1', port=8000):
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                 base_name = f"empresas_{timestamp}"
                 filename = f"{base_name}.{formato}"
-                
-                # Simular argumentos da linha de comando
-                import sys
-                backup_argv = sys.argv.copy()
-                
-                sys.argv = [
-                    'main.py', 'buscar', cnae,
-                    '--limite', str(limite),
-                    '--formato', formato,
-                    '--output', base_name
-                ]
-                
-                if uf:
-                    sys.argv.extend(['--uf', uf])
-                if cidade:
-                    sys.argv.extend(['--cidade', cidade])
-                if sheets:
-                    sys.argv.append('--sheets')
-                
-                # Executar busca
-                from main import main as cli_main
-                cli_main()
-                
-                # Restaurar sys.argv
-                sys.argv = backup_argv
-                
-                # Verificar arquivo gerado e contar linhas (CSV)
+
+                # Executar via classe diretamente para obter URL da planilha
+                prospector = CNAEProspector()
+                empresas = prospector.buscar_empresas_por_cnae(
+                    cnae_codigo=cnae,
+                    uf=uf,
+                    cidade=cidade,
+                    limite=limite
+                )
+
+                export_result = prospector.exportar_resultados(
+                    empresas=empresas,
+                    formato=formato,
+                    nome_arquivo=base_name,
+                    exportar_sheets=sheets
+                )
+
+                # Calcular contagem real do CSV gerado
                 file_path = os.path.join('data', 'exports', filename)
-                count = limite
+                count = len(empresas)
                 try:
                     if formato.lower() == 'csv' and os.path.exists(file_path):
                         with open(file_path, 'r', encoding='utf-8-sig', errors='ignore') as f:
@@ -220,12 +212,15 @@ def run_api_server(host='127.0.0.1', port=8000):
                 except Exception:
                     pass
 
+                # Se export_result for uma URL (Sheets), retorná-la em sheets_url
+                sheets_url = export_result if (sheets and isinstance(export_result, str) and export_result.startswith('http')) else None
+
                 return jsonify({
                     "success": True,
                     "count": count,
                     "filename": filename,
                     "file_url": f"/download/{filename}",
-                    "sheets_url": None if not sheets else None
+                    "sheets_url": sheets_url
                 })
                 
             except Exception as e:
