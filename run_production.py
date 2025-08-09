@@ -180,9 +180,10 @@ def run_api_server(host='127.0.0.1', port=8000):
                 if not cnae:
                     return jsonify({"success": False, "error": "CNAE é obrigatório"})
                 
-                # Gerar nome do arquivo
+                # Gerar nome e alinhar com exportação real
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-                filename = f"empresas_{timestamp}.{formato}"
+                base_name = f"empresas_{timestamp}"
+                filename = f"{base_name}.{formato}"
                 
                 # Simular argumentos da linha de comando
                 import sys
@@ -191,7 +192,8 @@ def run_api_server(host='127.0.0.1', port=8000):
                 sys.argv = [
                     'main.py', 'buscar', cnae,
                     '--limite', str(limite),
-                    '--formato', formato
+                    '--formato', formato,
+                    '--output', base_name
                 ]
                 
                 if uf:
@@ -208,12 +210,22 @@ def run_api_server(host='127.0.0.1', port=8000):
                 # Restaurar sys.argv
                 sys.argv = backup_argv
                 
+                # Verificar arquivo gerado e contar linhas (CSV)
+                file_path = os.path.join('data', 'exports', filename)
+                count = limite
+                try:
+                    if formato.lower() == 'csv' and os.path.exists(file_path):
+                        with open(file_path, 'r', encoding='utf-8-sig', errors='ignore') as f:
+                            count = max(0, sum(1 for _ in f) - 1)
+                except Exception:
+                    pass
+
                 return jsonify({
                     "success": True,
-                    "count": limite,
+                    "count": count,
                     "filename": filename,
                     "file_url": f"/download/{filename}",
-                    "sheets_url": "https://docs.google.com/spreadsheets/d/1ecOvpQfR0venrB4RcFCm6ta5IngygSkeJUN_IEKubQY" if sheets else None
+                    "sheets_url": None if not sheets else None
                 })
                 
             except Exception as e:
