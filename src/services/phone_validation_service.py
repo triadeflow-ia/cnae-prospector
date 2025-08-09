@@ -22,11 +22,30 @@ class PhoneValidationService:
         self.session = requests.Session()
 
     def validate(self, raw_phone: Optional[str]) -> Dict[str, str]:
-        if not self.enabled or not raw_phone:
+        if not raw_phone:
             return {}
         phone_digits = "".join(ch for ch in raw_phone if ch.isdigit())
         if not phone_digits:
             return {}
+
+        # Offline normalization fallback (E.164 BR best-effort)
+        digits = phone_digits
+        if digits.startswith("55"):
+            digits = digits[2:]
+        # keep last 11 or 10 digits as local number
+        if len(digits) > 11:
+            digits = digits[-11:]
+        e164_offline = "+55" + digits
+        fallback = {
+            "telefone_validado": e164_offline,
+            "validacao_telefone": "offline",
+            "tipo_linha": ""
+        }
+
+        # If provider not enabled, return fallback immediately
+        if not self.enabled:
+            return fallback
+
         try:
             if self.provider == "abstract":
                 url = f"https://phonevalidation.abstractapi.com/v1/?api_key={self.settings.PHONE_VALIDATION_API_KEY}&phone={phone_digits}&country=BR"
@@ -34,7 +53,7 @@ class PhoneValidationService:
                 url = f"http://apilayer.net/api/validate?access_key={self.settings.PHONE_VALIDATION_API_KEY}&number={phone_digits}&country_code=BR&format=1"
             r = self.session.get(url, timeout=self.settings.REQUEST_TIMEOUT)
             if r.status_code != 200:
-                return {}
+                return fallback
             data = r.json()
             # Normalized E.164 might be in different fields
             e164 = data.get("international_format") or data.get("format", {}).get("e164") or data.get("e164")
@@ -47,6 +66,6 @@ class PhoneValidationService:
             }
         except Exception as e:
             logger.error(f"Phone validation error: {e}")
-            return {}
+            return fallback
 
 
