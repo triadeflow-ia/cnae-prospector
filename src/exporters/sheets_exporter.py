@@ -36,7 +36,17 @@ class GoogleSheetsExporter:
             
             # Preferir credenciais via variável de ambiente (para plataformas como Railway)
             raw_json = os.getenv('GOOGLE_SHEETS_CREDENTIALS_JSON')
-            if raw_json:
+            raw_b64 = os.getenv('GOOGLE_SHEETS_CREDENTIALS_B64')
+            if raw_b64:
+                try:
+                    import base64
+                    decoded = base64.b64decode(raw_b64)
+                    info = json.loads(decoded)
+                    credentials = Credentials.from_service_account_info(info, scopes=scope)
+                except Exception as e:
+                    logger.error(f"Credenciais BASE64 inválidas em GOOGLE_SHEETS_CREDENTIALS_B64: {e}")
+                    return
+            elif raw_json:
                 try:
                     info = json.loads(raw_json)
                     credentials = Credentials.from_service_account_info(info, scopes=scope)
