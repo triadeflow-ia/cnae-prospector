@@ -7,6 +7,13 @@ from typing import List, Optional
 from pathlib import Path
 from datetime import datetime
 
+try:
+    import xlsxwriter  # noqa: F401
+    DEFAULT_EXCEL_ENGINE = 'xlsxwriter'
+except Exception:
+    # Fallback: openpyxl (sem formatação avançada)
+    DEFAULT_EXCEL_ENGINE = 'openpyxl'
+
 from src.config.settings import Settings
 from src.models.empresa import Empresa
 from src.utils.logger import setup_logger
@@ -52,8 +59,9 @@ class ExcelExporter:
             
             logger.info(f"Exportando {len(empresas)} empresas para Excel")
             
-            # Criar writer do Excel
-            with pd.ExcelWriter(arquivo_path, engine='xlsxwriter') as writer:
+            # Criar writer do Excel (tenta xlsxwriter, senão openpyxl)
+            engine = DEFAULT_EXCEL_ENGINE
+            with pd.ExcelWriter(arquivo_path, engine=engine) as writer:
                 # Aba principal com dados das empresas
                 self._exportar_empresas(empresas, writer)
                 
@@ -64,8 +72,8 @@ class ExcelExporter:
                 if incluir_socios:
                     self._exportar_socios(empresas, writer)
                 
-                # Adicionar formatação
-                self._aplicar_formatacao(writer)
+                # Adicionar formatação (somente quando usar xlsxwriter)
+                self._aplicar_formatacao(writer, engine)
             
             logger.info(f"Arquivo Excel criado: {arquivo_path}")
             return str(arquivo_path)
@@ -142,8 +150,11 @@ class ExcelExporter:
             df_socios.to_excel(writer, sheet_name="Sócios", index=False)
             logger.debug(f"Exportados {len(df_socios)} sócios")
     
-    def _aplicar_formatacao(self, writer):
+    def _aplicar_formatacao(self, writer, engine: str):
         """Aplica formatação ao arquivo Excel"""
+        # Somente xlsxwriter suporta as formatações abaixo
+        if engine != 'xlsxwriter':
+            return
         try:
             workbook = writer.book
             
@@ -214,7 +225,8 @@ class ExcelExporter:
             
             arquivo_path = self.settings.get_export_path(nome_arquivo, "excel")
             
-            with pd.ExcelWriter(arquivo_path, engine='xlsxwriter') as writer:
+            engine = DEFAULT_EXCEL_ENGINE
+            with pd.ExcelWriter(arquivo_path, engine=engine) as writer:
                 # Estatísticas por UF
                 self._exportar_estatisticas_uf(empresas, writer)
                 
