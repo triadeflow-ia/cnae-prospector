@@ -50,14 +50,23 @@ jobs:
         with:
           node-version: '18'
 
-      - name: Conditional deploy to Railway
+      - name: Conditional deploy to Railway (with optional project pin)
         env:
           RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
         run: |
           if [ -z "${RAILWAY_TOKEN}" ]; then
             echo "RAILWAY_TOKEN not set. Skipping deploy."
             exit 0
           fi
           npm i -g @railway/cli
-          railway status || true
-          railway up --service cnae-prospector --ci || railway up --ci || true
+          export RAILWAY_TOKEN
+          if [ -n "${RAILWAY_PROJECT_ID}" ]; then
+            echo "Using explicit Railway project: ${RAILWAY_PROJECT_ID}"
+            railway use --project "${RAILWAY_PROJECT_ID}" || true
+            railway up --project "${RAILWAY_PROJECT_ID}" --service cnae-prospector --ci || \
+            railway up --project "${RAILWAY_PROJECT_ID}" --ci || true
+          else
+            echo "No RAILWAY_PROJECT_ID provided; deploying with default project context"
+            railway up --service cnae-prospector --ci || railway up --ci || true
+          fi
