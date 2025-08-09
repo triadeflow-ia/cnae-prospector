@@ -98,8 +98,13 @@ Para integração com Google Sheets:
 1. Acesse o [Google Cloud Console](https://console.cloud.google.com)
 2. Crie um projeto e ative a API do Google Sheets
 3. Crie uma conta de serviço e baixe o arquivo JSON
-4. Salve como `config/google_sheets.json`
-5. Compartilhe sua planilha com o email da conta de serviço
+4. Compartilhe sua planilha com o email (client_email) da conta de serviço como Editor
+5. Configure uma das opções de credenciais:
+   - Arquivo local: salve o JSON como `config/google_sheets.json` (padrão em dev)
+   - Variável de ambiente (produção):
+     - `GOOGLE_SHEETS_CREDENTIALS_JSON` com o conteúdo JSON completo
+     - ou `GOOGLE_SHEETS_CREDENTIALS_B64` com o JSON em Base64 (recomendado para plataformas PaaS)
+6. Defina `GOOGLE_SHEETS_ID` com o ID da planilha de destino
 
 ## 🎮 Como Usar
 

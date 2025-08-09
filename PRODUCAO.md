@@ -47,9 +47,12 @@
    - Escolha "JSON"
    - Baixe o arquivo
 
-5. **Salvar credenciais:**
-   - Renomeie o arquivo para `google_sheets.json`
-   - Mova para a pasta `config/`
+5. **Salvar/Configurar credenciais:**
+   - Opção A (dev): renomeie o arquivo para `google_sheets.json` e mova para a pasta `config/`
+   - Opção B (produção): use variáveis de ambiente no provedor (ex.: Railway)
+     - `GOOGLE_SHEETS_CREDENTIALS_JSON` = conteúdo do JSON completo
+     - ou `GOOGLE_SHEETS_CREDENTIALS_B64` = Base64 do JSON
+   - Sempre compartilhe a planilha com o `client_email` como Editor
 
 ### 3. 📦 INSTALAR DEPENDÊNCIAS
 
@@ -76,7 +79,7 @@ python run_production.py --cnae 5611-2/01 --uf SP --cidade "São Paulo" --limite
 cnae-prospector/
 ├── .env                          # Configurações
 ├── config/
-│   └── google_sheets.json       # Credenciais Google
+│   └── google_sheets.json       # Credenciais Google (opcional em prod; usar variáveis)
 ├── data/
 │   ├── exports/                 # Arquivos exportados
 │   ├── processed/               # Dados processados
