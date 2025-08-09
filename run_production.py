@@ -181,10 +181,11 @@ def run_api_server(host='127.0.0.1', port=8000):
                 if not cnae:
                     return jsonify({"success": False, "error": "CNAE é obrigatório"})
                 
-                # Gerar nome e alinhar com exportação real
+                # Gerar nome base e extensão correta (excel -> .xlsx)
                 timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
                 base_name = f"empresas_{timestamp}"
-                filename = f"{base_name}.{formato}"
+                ext = 'xlsx' if formato.lower() == 'excel' else 'csv'
+                filename = f"{base_name}.{ext}"
 
                 # Executar via classe diretamente para obter URL da planilha
                 prospector = CNAEProspector()
@@ -202,11 +203,18 @@ def run_api_server(host='127.0.0.1', port=8000):
                     exportar_sheets=sheets
                 )
 
-                # Calcular contagem real do CSV gerado
+                # Determinar caminho real do arquivo exportado e contar linhas se CSV
                 file_path = os.path.join('data', 'exports', filename)
+                if isinstance(export_result, str) and not export_result.startswith('http'):
+                    try:
+                        # Usar o caminho retornado pelo exportador quando disponível
+                        file_path = export_result
+                        filename = os.path.basename(file_path)
+                    except Exception:
+                        pass
                 count = len(empresas)
                 try:
-                    if formato.lower() == 'csv' and os.path.exists(file_path):
+                    if filename.lower().endswith('.csv') and os.path.exists(file_path):
                         with open(file_path, 'r', encoding='utf-8-sig', errors='ignore') as f:
                             count = max(0, sum(1 for _ in f) - 1)
                 except Exception:
