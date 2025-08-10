@@ -63,7 +63,9 @@ class Settings:
         # Descoberta de domínio (quando não houver website)
         self.ENABLE_DOMAIN_DISCOVERY = os.getenv("ENABLE_DOMAIN_DISCOVERY", "false").lower() == "true"
         self.SERPAPI_KEY = os.getenv("SERPAPI_KEY", "")
-        self.BING_API_KEY = os.getenv("BING_API_KEY", "")
+        self.BING_API_KEY = os.getenv("BING_API_KEY", "")  # deprecated/unused
+        self.GOOGLE_CSE_API_KEY = os.getenv("GOOGLE_CSE_API_KEY", "")
+        self.GOOGLE_CSE_CX = os.getenv("GOOGLE_CSE_CX", "")
         
         # Google Sheets (opcional)
         self.GOOGLE_SHEETS_CREDENTIALS_PATH = os.getenv(
@@ -128,8 +130,8 @@ class Settings:
             warnings.append("EMAIL_VALIDATION_API_KEY não configurada - Validação de e-mail ficará desativada")
         if self.ENABLE_COMPANY_ENRICHMENT and not self.COMPANY_ENRICHMENT_API_KEY:
             warnings.append("COMPANY_ENRICHMENT_API_KEY não configurada - Enriquecimento de empresa ficará desativado")
-        if self.ENABLE_DOMAIN_DISCOVERY and not (self.SERPAPI_KEY or self.BING_API_KEY):
-            warnings.append("Nenhuma chave (SERPAPI_KEY/BING_API_KEY) para descoberta de domínio - recurso ficará desativado")
+        if self.ENABLE_DOMAIN_DISCOVERY and not (self.SERPAPI_KEY or (self.GOOGLE_CSE_API_KEY and self.GOOGLE_CSE_CX)):
+            warnings.append("Nenhuma chave (SERPAPI_KEY ou GOOGLE_CSE_API_KEY/GOOGLE_CSE_CX) para descoberta de domínio - recurso ficará desativado")
         
         # Apenas mostra warnings, não falha
         if warnings:

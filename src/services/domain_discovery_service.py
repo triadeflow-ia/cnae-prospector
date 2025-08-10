@@ -17,7 +17,7 @@ logger = setup_logger(__name__)
 class DomainDiscoveryService:
     def __init__(self, settings: Settings):
         self.settings = settings
-        self.enabled = bool(settings.ENABLE_DOMAIN_DISCOVERY and (settings.SERPAPI_KEY or settings.BING_API_KEY))
+        self.enabled = bool(settings.ENABLE_DOMAIN_DISCOVERY and (settings.SERPAPI_KEY or (settings.GOOGLE_CSE_API_KEY and settings.GOOGLE_CSE_CX)))
         self.session = requests.Session()
 
     def discover(self, company_name: str, city: Optional[str], uf: Optional[str]) -> Optional[str]:
@@ -52,22 +52,27 @@ class DomainDiscoveryService:
                                 return domain
             except Exception as e:
                 logger.warning(f"SerpAPI domain discovery error: {e}")
-        # Fallback: Bing
-        if self.settings.BING_API_KEY:
+        # Fallback: Google Programmable Search (CSE JSON API)
+        if self.settings.GOOGLE_CSE_API_KEY and self.settings.GOOGLE_CSE_CX:
             try:
-                headers = {"Ocp-Apim-Subscription-Key": self.settings.BING_API_KEY}
-                params = {"q": query, "mkt": "pt-BR", "count": 3}
-                r = self.session.get("https://api.bing.microsoft.com/v7.0/search", headers=headers, params=params, timeout=self.settings.REQUEST_TIMEOUT)
+                params = {
+                    "key": self.settings.GOOGLE_CSE_API_KEY,
+                    "cx": self.settings.GOOGLE_CSE_CX,
+                    "q": query,
+                    "num": 3,
+                    "hl": "pt-BR",
+                }
+                r = self.session.get("https://www.googleapis.com/customsearch/v1", params=params, timeout=self.settings.REQUEST_TIMEOUT)
                 if r.status_code == 200:
-                    js = r.json()
-                    for res in (js.get("webPages", {}).get("value", [])):
-                        url = res.get("url") or ""
+                    js = r.json() or {}
+                    for res in (js.get("items") or []):
+                        url = res.get("link") or ""
                         if url:
                             domain = url.replace("https://", "").replace("http://", "").split("/")[0]
-                            if domain and not domain.endswith("bing.com"):
+                            if domain:
                                 return domain
             except Exception as e:
-                logger.warning(f"Bing domain discovery error: {e}")
+                logger.warning(f"Google CSE domain discovery error: {e}")
         return None
 
 
