@@ -575,8 +575,9 @@ class EmpresaService:
 
                     # Descoberta de domínio quando não houver website
                     if self._domain_discovery.enabled and not getattr(empresa, "website", None):
-                        dd = self._domain_discovery.discover(empresa.razao_social or empresa.nome_fantasia or "", empresa.endereco.cidade if empresa.endereco else None, empresa.endereco.uf if empresa.endereco else None)
-                        if isinstance(dd, dict) and dd.get("domain") and dd.get("confidence", 0) >= 0.6:
+                        comp_name = empresa.razao_social or empresa.nome_fantasia or ""
+                        dd = self._domain_discovery.discover(comp_name, empresa.endereco.cidade if empresa.endereco else None, empresa.endereco.uf if empresa.endereco else None)
+                        if isinstance(dd, dict) and dd.get("domain") and dd.get("confidence", 0) >= 0.5:
                             setattr(empresa, "website", f"https://{dd['domain']}")
                             setattr(empresa, "domain_confidence", dd.get("confidence"))
                             setattr(empresa, "domain_source", dd.get("source"))
@@ -609,6 +610,32 @@ class EmpresaService:
                         for k, v in ep.items():
                             setattr(empresa, k, v)
 
+                    # Quality gates (strict mode)
+                    if self.settings.STRICT_MODE:
+                        # Require active status and address basics
+                        if (empresa.situacao_cadastral or '').upper() != 'ATIVA':
+                            continue
+                        if not (empresa.endereco and empresa.endereco.cidade and empresa.endereco.uf and empresa.endereco.cep):
+                            continue
+                        # Require valid contact (phone or email) if enabled
+                        if self.settings.REQUIRE_VALID_CONTACT:
+                            valid_email = (getattr(empresa, 'email_validacao', '') in ['deliverable', 'válido'])
+                            valid_phone = (getattr(empresa, 'validacao_telefone', '') == 'válido')
+                            if not (valid_email or valid_phone):
+                                continue
+                        # Require email domain match if enabled
+                        if self.settings.REQUIRE_DOMAIN_MATCH and empresa.email and getattr(empresa, 'website', None):
+                            try:
+                                mail_dom = empresa.email.split('@')[-1].lower()
+                                site_dom = empresa.website.replace('https://', '').replace('http://', '').split('/')[0].lower()
+                                if mail_dom not in site_dom and site_dom not in mail_dom:
+                                    continue
+                            except Exception:
+                                pass
+                        # Domain confidence gate
+                        if getattr(empresa, 'domain_confidence', None) is not None and empresa.domain_confidence < self.settings.MIN_CONFIDENCE_DOMAIN:
+                            # If domain_confidence exists but is below min, drop website
+                            setattr(empresa, 'website', '')
                     empresas.append(empresa)
 
                 return empresas

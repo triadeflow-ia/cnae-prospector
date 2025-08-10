@@ -70,6 +70,15 @@ class Settings:
         # Email pattern (Hunter) - optional
         self.ENABLE_EMAIL_PATTERN = os.getenv("ENABLE_EMAIL_PATTERN", "false").lower() == "true"
         self.HUNTER_API_KEY = os.getenv("HUNTER_API_KEY", "")
+
+        # Strict Mode / Quality Gates
+        self.STRICT_MODE = os.getenv("STRICT_MODE", "false").lower() == "true"
+        self.REQUIRE_VALID_CONTACT = os.getenv("REQUIRE_VALID_CONTACT", "false").lower() == "true"
+        self.REQUIRE_DOMAIN_MATCH = os.getenv("REQUIRE_DOMAIN_MATCH", "false").lower() == "true"
+        try:
+            self.MIN_CONFIDENCE_DOMAIN = float(os.getenv("MIN_CONFIDENCE_DOMAIN", "0.6"))
+        except Exception:
+            self.MIN_CONFIDENCE_DOMAIN = 0.6
         
         # Google Sheets (opcional)
         self.GOOGLE_SHEETS_CREDENTIALS_PATH = os.getenv(
