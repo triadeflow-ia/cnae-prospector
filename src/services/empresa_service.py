@@ -17,6 +17,7 @@ from .places_service import GooglePlacesService
 from .phone_validation_service import PhoneValidationService
 from .email_validation_service import EmailValidationService
 from .company_enrichment_service import CompanyEnrichmentService
+from .domain_discovery_service import DomainDiscoveryService
 
 logger = setup_logger(__name__)
 
@@ -37,6 +38,7 @@ class EmpresaService:
         self._phone_validator = PhoneValidationService(settings)
         self._email_validator = EmailValidationService(settings)
         self._company_enrich = CompanyEnrichmentService(settings)
+        self._domain_discovery = DomainDiscoveryService(settings)
     
     def _rate_limit(self):
         """Implementa rate limiting para evitar exceder limites da API"""
@@ -569,9 +571,15 @@ class EmpresaService:
                         if ev.get("email_sugestao"):
                             setattr(empresa, "email_sugestao", ev["email_sugestao"])  # para export
 
+                    # Descoberta de domínio quando não houver website
+                    if self._domain_discovery.enabled and not getattr(empresa, "website", None):
+                        d = self._domain_discovery.discover(empresa.razao_social or empresa.nome_fantasia or "", empresa.endereco.cidade if empresa.endereco else None, empresa.endereco.uf if empresa.endereco else None)
+                        if d:
+                            setattr(empresa, "website", f"https://{d}")
+                            empresa.fonte = f"{empresa.fonte}; DomainDiscovery"
+
                     # Camada 2: Company enrichment por domínio (opcional)
                     if self._company_enrich.enabled:
-                        # Obter domínio a partir do website, se houver
                         website = getattr(empresa, "website", "") or ""
                         domain = ""
                         if website:

@@ -59,6 +59,11 @@ class Settings:
         # Enriquecimento Camada 2 - Company Enrichment (opcional)
         self.ENABLE_COMPANY_ENRICHMENT = os.getenv("ENABLE_COMPANY_ENRICHMENT", "false").lower() == "true"
         self.COMPANY_ENRICHMENT_API_KEY = os.getenv("COMPANY_ENRICHMENT_API_KEY", "")
+
+        # Descoberta de domínio (quando não houver website)
+        self.ENABLE_DOMAIN_DISCOVERY = os.getenv("ENABLE_DOMAIN_DISCOVERY", "false").lower() == "true"
+        self.SERPAPI_KEY = os.getenv("SERPAPI_KEY", "")
+        self.BING_API_KEY = os.getenv("BING_API_KEY", "")
         
         # Google Sheets (opcional)
         self.GOOGLE_SHEETS_CREDENTIALS_PATH = os.getenv(
@@ -123,6 +128,8 @@ class Settings:
             warnings.append("EMAIL_VALIDATION_API_KEY não configurada - Validação de e-mail ficará desativada")
         if self.ENABLE_COMPANY_ENRICHMENT and not self.COMPANY_ENRICHMENT_API_KEY:
             warnings.append("COMPANY_ENRICHMENT_API_KEY não configurada - Enriquecimento de empresa ficará desativado")
+        if self.ENABLE_DOMAIN_DISCOVERY and not (self.SERPAPI_KEY or self.BING_API_KEY):
+            warnings.append("Nenhuma chave (SERPAPI_KEY/BING_API_KEY) para descoberta de domínio - recurso ficará desativado")
         
         # Apenas mostra warnings, não falha
         if warnings:
