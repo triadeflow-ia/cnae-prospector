@@ -21,6 +21,23 @@ class GooglePlacesService:
         self.enabled = bool(settings.ENABLE_PLACES and self.api_key)
         self.session = requests.Session()
 
+    def _is_blacklisted(self, url: str) -> bool:
+        u = (url or "").lower()
+        blacklist = [
+            "facebook.com",
+            "instagram.com",
+            "x.com",
+            "twitter.com",
+            "youtube.com",
+            "linkedin.com",
+            "wikipedia.org",
+            "maps.google",
+            "g.page",
+            ".gov.br",
+            "gov.br",
+        ]
+        return any(b in u for b in blacklist)
+
     def enrich(self, razao_social: str, cidade: Optional[str], uf: Optional[str]) -> Dict[str, Any]:
         """Return website and formatted_phone_number if found"""
         if not self.enabled:
@@ -60,9 +77,12 @@ class GooglePlacesService:
             if dr.status_code != 200:
                 return {}
             d = dr.json().get("result", {})
+            website = d.get("website")
+            if website and self._is_blacklisted(website):
+                website = None
             phone = d.get("international_phone_number") or d.get("formatted_phone_number")
             return {
-                "website": d.get("website"),
+                "website": website,
                 "phone": phone,
                 "fonte_places": "Google Places",
             }
