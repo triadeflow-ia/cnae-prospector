@@ -66,6 +66,10 @@ class Settings:
         self.BING_API_KEY = os.getenv("BING_API_KEY", "")  # deprecated/unused
         self.GOOGLE_CSE_API_KEY = os.getenv("GOOGLE_CSE_API_KEY", "")
         self.GOOGLE_CSE_CX = os.getenv("GOOGLE_CSE_CX", "")
+
+        # Email pattern (Hunter) - optional
+        self.ENABLE_EMAIL_PATTERN = os.getenv("ENABLE_EMAIL_PATTERN", "false").lower() == "true"
+        self.HUNTER_API_KEY = os.getenv("HUNTER_API_KEY", "")
         
         # Google Sheets (opcional)
         self.GOOGLE_SHEETS_CREDENTIALS_PATH = os.getenv(
@@ -132,6 +136,8 @@ class Settings:
             warnings.append("COMPANY_ENRICHMENT_API_KEY não configurada - Enriquecimento de empresa ficará desativado")
         if self.ENABLE_DOMAIN_DISCOVERY and not (self.SERPAPI_KEY or (self.GOOGLE_CSE_API_KEY and self.GOOGLE_CSE_CX)):
             warnings.append("Nenhuma chave (SERPAPI_KEY ou GOOGLE_CSE_API_KEY/GOOGLE_CSE_CX) para descoberta de domínio - recurso ficará desativado")
+        if self.ENABLE_EMAIL_PATTERN and not self.HUNTER_API_KEY:
+            warnings.append("HUNTER_API_KEY não configurada - Padrão de e-mail ficará desativado")
         
         # Apenas mostra warnings, não falha
         if warnings:

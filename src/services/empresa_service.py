@@ -18,6 +18,7 @@ from .phone_validation_service import PhoneValidationService
 from .email_validation_service import EmailValidationService
 from .company_enrichment_service import CompanyEnrichmentService
 from .domain_discovery_service import DomainDiscoveryService
+from .email_pattern_service import EmailPatternService
 
 logger = setup_logger(__name__)
 
@@ -39,6 +40,7 @@ class EmpresaService:
         self._email_validator = EmailValidationService(settings)
         self._company_enrich = CompanyEnrichmentService(settings)
         self._domain_discovery = DomainDiscoveryService(settings)
+        self._email_pattern = EmailPatternService(settings)
     
     def _rate_limit(self):
         """Implementa rate limiting para evitar exceder limites da API"""
@@ -593,6 +595,19 @@ class EmpresaService:
                             ce = self._company_enrich.enrich(domain)
                             for k, v in ce.items():
                                 setattr(empresa, k, v)
+
+                    # Email pattern via Hunter
+                    website = getattr(empresa, "website", "") or ""
+                    domain = ""
+                    if website:
+                        try:
+                            domain = website.replace("https://", "").replace("http://", "").split("/")[0]
+                        except Exception:
+                            domain = ""
+                    if self._email_pattern.enabled and domain:
+                        ep = self._email_pattern.enrich(domain)
+                        for k, v in ep.items():
+                            setattr(empresa, k, v)
 
                     empresas.append(empresa)
 

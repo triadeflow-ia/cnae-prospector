@@ -266,7 +266,7 @@ class GoogleSheetsExporter:
                 "Setor (CNAE)", "Atividade Principal", "Porte Empresa", "Data Abertura",
                 "Telefone Principal", "Email Contato", "Endereço Completo",
                 "Rua", "Número", "Bairro", "Cidade", "Estado (UF)", "CEP",
-                "Capital Social", "Website", "Telefone Validado", "Validação Telefone", "Email Validação", "Email Sugestão", "Domain Confidence", "Domain Source", "Fonte dos Dados", "Data da Consulta",
+                "Capital Social", "Website", "Telefone Validado", "Validação Telefone", "Email Validação", "Email Sugestão", "Email Padrão", "E-mails do Domínio", "E-mails Confiança", "Domain Confidence", "Domain Source", "Fonte dos Dados", "Data da Consulta",
                 "Lead Score", "Observações", "Responsável", "Status Contato"
             ]
             
@@ -375,6 +375,9 @@ class GoogleSheetsExporter:
                 "Validação Telefone": getattr(empresa, 'validacao_telefone', ''),
                 "Email Validação": getattr(empresa, 'email_validacao', ''),
                 "Email Sugestão": getattr(empresa, 'email_sugestao', ''),
+                "Email Padrão": getattr(empresa, 'email_padrao', ''),
+                "E-mails do Domínio": getattr(empresa, 'emails_dominio', ''),
+                "E-mails Confiança": getattr(empresa, 'emails_confianza', ''),
                 "Domain Confidence": getattr(empresa, 'domain_confidence', ''),
                 "Domain Source": getattr(empresa, 'domain_source', ''),
                 "Fonte dos Dados": getattr(empresa, 'fonte', 'CNAE Prospector'),
