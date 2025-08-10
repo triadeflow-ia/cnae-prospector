@@ -573,9 +573,11 @@ class EmpresaService:
 
                     # Descoberta de domínio quando não houver website
                     if self._domain_discovery.enabled and not getattr(empresa, "website", None):
-                        d = self._domain_discovery.discover(empresa.razao_social or empresa.nome_fantasia or "", empresa.endereco.cidade if empresa.endereco else None, empresa.endereco.uf if empresa.endereco else None)
-                        if d:
-                            setattr(empresa, "website", f"https://{d}")
+                        dd = self._domain_discovery.discover(empresa.razao_social or empresa.nome_fantasia or "", empresa.endereco.cidade if empresa.endereco else None, empresa.endereco.uf if empresa.endereco else None)
+                        if isinstance(dd, dict) and dd.get("domain") and dd.get("confidence", 0) >= 0.6:
+                            setattr(empresa, "website", f"https://{dd['domain']}")
+                            setattr(empresa, "domain_confidence", dd.get("confidence"))
+                            setattr(empresa, "domain_source", dd.get("source"))
                             empresa.fonte = f"{empresa.fonte}; DomainDiscovery"
 
                     # Camada 2: Company enrichment por domínio (opcional)

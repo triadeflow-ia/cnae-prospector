@@ -100,6 +100,8 @@ class CSVExporter:
                     "Twitter",
                     "Facebook",
                     "Instagram",
+                    "Domain Confidence",
+                    "Domain Source",
                     "Fonte dos Dados",
                     "Data da Consulta",
                     
@@ -248,6 +250,8 @@ class CSVExporter:
             "Twitter": getattr(empresa, 'empresa_twitter', ''),
             "Facebook": getattr(empresa, 'empresa_facebook', ''),
             "Instagram": getattr(empresa, 'empresa_instagram', ''),
+            "Domain Confidence": getattr(empresa, 'domain_confidence', ''),
+            "Domain Source": getattr(empresa, 'domain_source', ''),
             "Fonte dos Dados": getattr(empresa, 'fonte', 'CNAE Prospector'),
             "Data da Consulta": datetime.now().strftime("%d/%m/%Y %H:%M"),
             
