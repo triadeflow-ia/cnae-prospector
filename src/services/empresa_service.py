@@ -203,6 +203,11 @@ class EmpresaService:
             logger.info(f"Nuvem Fiscal retornou {len(empresas)} empresas")
             
             if not empresas:
+                # Fallback: tentar listagem via RapidAPI (buscar-base.php)
+                empresas = self._listar_via_rapidapi(cnae_limpo, uf, cidade, limite)
+                logger.info(f"RapidAPI (listar) retornou {len(empresas)} empresas")
+
+            if not empresas:
                 empresas = self._buscar_via_cnpj_ws(cnae_limpo, uf, cidade, limite)
                 logger.info(f"CNPJ.ws retornou {len(empresas)} empresas")
             
@@ -860,6 +865,108 @@ class EmpresaService:
             return []
         except Exception as e:
             logger.error(f"Erro na BrasilAPI: {e}")
+            return []
+
+    def _listar_via_rapidapi(self, cnae: str, uf: Optional[str], cidade: Optional[str], limite: int) -> List[Empresa]:
+        """Lista empresas via endpoint RapidAPI genérico (ex.: buscar-base.php)."""
+        try:
+            if not self.settings.RAPIDAPI_ENABLED:
+                return []
+
+            from src.models.empresa import Empresa, Endereco, CNAE
+            from datetime import datetime
+            import re
+
+            base = self.settings.RAPIDAPI_BASE_URL.rstrip('/')
+            headers = self.settings.get_api_headers()
+            session = self.session
+
+            def try_request(params: dict):
+                try:
+                    self._rate_limit()
+                    r = session.get(base, headers=headers, params=params, timeout=self.settings.REQUEST_TIMEOUT)
+                    if r.status_code == 200:
+                        return r.json()
+                except Exception:
+                    return None
+                return None
+
+            params_candidates = []
+            # Candidatos mais comuns para esse provedor
+            params_candidates.append({'cnae': cnae})
+            if cidade:
+                params_candidates.append({'municipio': cidade, 'cnae': cnae})
+            if uf and cidade:
+                params_candidates.append({'uf': uf, 'municipio': cidade, 'cnae': cnae})
+            if uf:
+                params_candidates.append({'uf': uf, 'cnae': cnae})
+
+            empresas: List[Empresa] = []
+            for p in params_candidates:
+                payload = try_request(p)
+                if not payload:
+                    continue
+                # Extrair lista independente de chave
+                items = None
+                if isinstance(payload, list):
+                    items = payload
+                elif isinstance(payload, dict):
+                    for key in ['data', 'empresas', 'resultados', 'items', 'value', 'results']:
+                        if isinstance(payload.get(key), list):
+                            items = payload.get(key)
+                            break
+                    if items is None:
+                        # Alguns retornam diretamente o objeto com campos conhecidos
+                        items = payload.get('estabelecimentos') or payload.get('lista')
+                if not items:
+                    continue
+
+                for item in items:
+                    try:
+                        cnpj_raw = str(item.get('cnpj') or item.get('CNPJ') or '')
+                        cnpj = re.sub(r'\D', '', cnpj_raw)
+                        if not cnpj:
+                            continue
+                        # criar empresa com campos disponíveis
+                        endereco = Endereco(
+                            logradouro=item.get('logradouro') or item.get('rua'),
+                            numero=str(item.get('numero')) if item.get('numero') is not None else None,
+                            bairro=item.get('bairro'),
+                            cidade=item.get('municipio') or item.get('cidade'),
+                            uf=item.get('uf') or item.get('estado') or item.get('estado_sigla'),
+                            cep=(item.get('cep') or '').replace('-', '') or None,
+                        )
+                        cnae_cod = item.get('cnae_principal') or item.get('cnae')
+                        cnae_desc = item.get('cnae_principal_descricao') or item.get('cnae_descricao')
+                        cnae_obj = CNAE(codigo=cnae_cod, descricao=cnae_desc or '', principal=True) if cnae_cod else None
+
+                        empresa = Empresa(
+                            cnpj=cnpj,
+                            razao_social=item.get('razao_social') or item.get('razaosocial') or item.get('nome') or '',
+                            nome_fantasia=item.get('nome_fantasia') or item.get('fantasia'),
+                            situacao_cadastral=item.get('situacao_cadastral') or item.get('situacao') or '',
+                            data_abertura=None,
+                            porte=item.get('porte') or '',
+                            natureza_juridica=item.get('natureza_juridica') or item.get('natureza') or '',
+                            endereco=endereco,
+                            cnae_principal=cnae_obj,
+                            telefone=item.get('telefone') or item.get('ddd_telefone_1') or item.get('ddd_telefone_2') or '',
+                            email=item.get('email') or '',
+                            fonte='RapidAPI - Listagem'
+                        )
+
+                        empresas.append(empresa)
+                        if len(empresas) >= limite:
+                            return empresas
+                    except Exception:
+                        continue
+
+                if empresas:
+                    break
+
+            return empresas
+        except Exception as e:
+            logger.error(f"Erro na listagem via RapidAPI: {e}")
             return []
     
     def _gerar_dados_demonstrativos(self, cnae_codigo: str, uf: str, cidade: str, limite: int) -> List[Empresa]:
