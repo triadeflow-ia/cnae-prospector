@@ -343,10 +343,13 @@ class EmpresaService:
                     if empresas_listagem:
                         logger.info(f"Nuvem Fiscal (listagem) retornou {len(empresas_listagem)} empresas")
                         return empresas_listagem
+                    # Quando a busca municipal não retorna, não usar fallback genérico
+                    logger.warning("Listagem municipal não retornou resultados; evitando fallback genérico em modo regional")
+                    return []
                 else:
                     logger.warning(f"Código IBGE não mapeado para {cidade}/{uf}; pulando listagem por município")
 
-            # Fallback: consultar CNPJs conhecidos e obter dados reais
+            # Fallback: consultar CNPJs conhecidos e obter dados reais (somente quando não há filtro regional)
             empresas = self._consultar_cnpjs_reais_nuvem_fiscal(token, cnae, uf, cidade, limite)
             logger.info(f"Nuvem Fiscal (fallback CNPJs) retornou {len(empresas)} empresas")
             return empresas
@@ -440,8 +443,8 @@ class EmpresaService:
                 '$top': limite,
                 '$select': 'cnpj,razao_social,nome_fantasia,logradouro,numero,bairro,municipio,uf,cep,telefone,email,cnae_principal,cnae_principal_descricao,porte,situacao_cadastral,data_abertura'
             }
-            # naturezas jurídicas podem ser restritivas; enviar padrão 2062 (Ltda) se não configurado
-            natureza_config = os.getenv('NUVEM_FISCAL_FILTER_NATUREZA', '2062')
+            # naturezas jurídicas podem ser restritivas; não enviar por padrão
+            natureza_config = os.getenv('NUVEM_FISCAL_FILTER_NATUREZA', '')
             if natureza_config:
                 params['natureza_juridica'] = natureza_config
             
