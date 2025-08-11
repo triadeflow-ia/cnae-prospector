@@ -426,227 +426,272 @@ class EmpresaService:
         return None
     
     def _fazer_busca_nuvem_fiscal(self, token: str, cnae: str, municipio: str, limite: int) -> List[Empresa]:
-        """Faz a busca real na API Nuvem Fiscal"""
+        """Faz a busca real na API Nuvem Fiscal, tentando múltiplos endpoints/parametrizações e paginação"""
         try:
             from src.models.empresa import Empresa, Endereco, CNAE
             from datetime import datetime
             
             headers = {
                 'Authorization': f'Bearer {token}',
+                'Accept': 'application/json',
                 'Content-Type': 'application/json'
             }
-            
-            # Parâmetros da busca (tentar selecionar campos de endereço e contato)
-            params = {
-                'cnae_principal': cnae,
-                'municipio': municipio,
-                '$top': limite,
-                '$select': 'cnpj,razao_social,nome_fantasia,logradouro,numero,bairro,municipio,uf,cep,telefone,email,cnae_principal,cnae_principal_descricao,porte,situacao_cadastral,data_abertura'
-            }
-            # naturezas jurídicas podem ser restritivas; não enviar por padrão
-            natureza_config = os.getenv('NUVEM_FISCAL_FILTER_NATUREZA', '')
-            if natureza_config:
-                params['natureza_juridica'] = natureza_config
-            
-            self._rate_limit()
-            response = self.session.get(
+
+            # Candidatos de endpoints (varia por rota/versão)
+            endpoint_candidates = [
+                f"{self.settings.NUVEM_FISCAL_BASE_URL}/cnpj/estabelecimentos",
+                f"{self.settings.NUVEM_FISCAL_BASE_URL}/cnpj/empresas",
                 f"{self.settings.NUVEM_FISCAL_BASE_URL}/cnpj",
-                headers=headers,
-                params=params,
-                timeout=self.settings.REQUEST_TIMEOUT
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                empresas = []
+            ]
 
-                for item in data.get('data', []):
-                    # Normalizações de campos vindos como objetos
-                    situacao = item.get('situacao_cadastral')
-                    if isinstance(situacao, dict):
-                        situacao_cadastral = situacao.get('descricao') or situacao.get('codigo') or ''
-                    else:
-                        situacao_cadastral = situacao or ''
+            # Candidatos de parâmetros
+            base_select = 'cnpj,razao_social,nome_fantasia,logradouro,numero,bairro,municipio,uf,cep,telefone,email,cnae_principal,cnae_principal_descricao,porte,situacao_cadastral,data_abertura'
+            natureza_config = os.getenv('NUVEM_FISCAL_FILTER_NATUREZA', '').strip()
+            param_candidates = [
+                {'municipio': municipio, 'cnae_principal': cnae, '$select': base_select},
+                {'municipio_codigo': municipio, 'cnae_principal': cnae, '$select': base_select},
+                {'municipio': municipio, 'cnae': cnae, '$select': base_select},
+                {'$filter': f"municipio eq '{municipio}' and (cnae_principal eq '{cnae}' or cnae eq '{cnae}')", '$select': base_select},
+            ]
+            if natureza_config:
+                for p in param_candidates:
+                    p['natureza_juridica'] = natureza_config
 
-                    porte_val = item.get('porte')
-                    if isinstance(porte_val, dict):
-                        porte = porte_val.get('descricao') or porte_val.get('codigo') or ''
-                    else:
-                        porte = porte_val or ''
+            empresas: List[Empresa] = []
+            page_size = min(100, max(1, limite))
 
-                    # Endereço pode não vir na listagem; tentar montar com o que houver
-                    endereco = Endereco(
-                        logradouro=item.get('logradouro') or '',
-                        numero=item.get('numero') or '',
-                        bairro=item.get('bairro') or '',
-                        cidade=item.get('municipio') or '',
-                        uf=item.get('uf') or '',
-                        cep=item.get('cep') or ''
-                    )
+            for endpoint in endpoint_candidates:
+                if empresas:
+                    break
+                for base_params in param_candidates:
+                    if empresas:
+                        break
+                    skip = 0
+                    tentativas_sem_dado = 0
+                    while len(empresas) < limite and tentativas_sem_dado < 2:
+                        params = dict(base_params)
+                        params['$top'] = min(page_size, limite - len(empresas))
+                        if skip:
+                            params['$skip'] = skip
 
-                    # CNAE principal
-                    cnae_codigo = item.get('cnae_principal')
-                    cnae_desc = item.get('cnae_principal_descricao', '')
-                    cnae_obj = CNAE(
-                        codigo=cnae_codigo,
-                        descricao=cnae_desc,
-                        principal=True
-                    ) if cnae_codigo else None
+                        self._rate_limit()
+                        response = self.session.get(
+                            endpoint,
+                            headers=headers,
+                            params=params,
+                            timeout=self.settings.REQUEST_TIMEOUT
+                        )
 
-                    # Datas
-                    data_abertura = None
-                    for key in ['data_abertura', 'data_inicio_atividade']:
-                        if item.get(key):
-                            try:
-                                data_abertura = datetime.strptime(item.get(key), '%Y-%m-%d')
-                                break
-                            except Exception:
-                                pass
+                        if response.status_code != 200:
+                            logger.debug(f"Listagem Nuvem Fiscal falhou ({response.status_code}) endpoint={endpoint} params={params}")
+                            break
 
-                    # Contatos
-                    telefone = item.get('telefone') or item.get('ddd_telefone_1') or ''
-                    email = item.get('email') or ''
+                        payload = response.json() or {}
+                        items = None
+                        if isinstance(payload, list):
+                            items = payload
+                        else:
+                            for key in ['data', 'value', 'items', 'results', 'content']:
+                                if isinstance(payload.get(key), list):
+                                    items = payload.get(key)
+                                    break
 
-                    cnpj_limpo = (item.get('cnpj') or '').replace('.', '').replace('/', '').replace('-', '')
+                        if not items:
+                            tentativas_sem_dado += 1
+                            if '$skip' in params:
+                                skip += params.get('$top', page_size)
+                            break
 
-                    empresa = Empresa(
-                        cnpj=cnpj_limpo,
-                        razao_social=item.get('razao_social', ''),
-                        nome_fantasia=item.get('nome_fantasia'),
-                        situacao_cadastral=situacao_cadastral,
-                        data_abertura=data_abertura,
-                        porte=porte,
-                        natureza_juridica=(item.get('natureza_juridica') or ''),
-                        endereco=endereco,
-                        cnae_principal=cnae_obj,
-                        telefone=telefone,
-                        email=email,
-                        fonte="Nuvem Fiscal"
-                    )
+                        tentativas_sem_dado = 0
 
-                    # Enriquecer com detalhe se endereço veio vazio
-                    if not (empresa.endereco and (empresa.endereco.logradouro or empresa.endereco.cidade or empresa.endereco.cep)):
-                        detalhe = self._consultar_cnpj_individual_nuvem_fiscal(token, cnpj_limpo)
-                        if detalhe and detalhe.endereco:
-                            empresa.endereco = detalhe.endereco
-                        if detalhe and detalhe.cnae_principal and not empresa.cnae_principal:
-                            empresa.cnae_principal = detalhe.cnae_principal
-                        if detalhe and not empresa.email:
-                            empresa.email = detalhe.email
-                        if detalhe and not empresa.telefone:
-                            empresa.telefone = detalhe.telefone
+                        for item in items:
+                            # Normalizações de campos vindos como objetos
+                            situacao = item.get('situacao_cadastral')
+                            if isinstance(situacao, dict):
+                                situacao_cadastral = situacao.get('descricao') or situacao.get('codigo') or ''
+                            else:
+                                situacao_cadastral = situacao or ''
 
-                    # Fallback extra: tentar BrasilAPI para completar endereço
-                    if not (empresa.endereco and (empresa.endereco.logradouro or empresa.endereco.cidade or empresa.endereco.cep)):
-                        endereco_fb, email_fb, fone_fb = self._consultar_cnpj_brasilapi(cnpj_limpo)
-                        if endereco_fb:
-                            empresa.endereco = endereco_fb
-                        if (not empresa.email) and email_fb:
-                            empresa.email = email_fb
-                        if (not empresa.telefone) and fone_fb:
-                            empresa.telefone = fone_fb
+                            porte_val = item.get('porte')
+                            if isinstance(porte_val, dict):
+                                porte = porte_val.get('descricao') or porte_val.get('codigo') or ''
+                            else:
+                                porte = porte_val or ''
 
-                    # Enriquecimento opcional via RapidAPI (duplo check)
-                    if self._rapid_enrich:
-                        empresa = self._rapid_enrich.enrich_empresa_by_cnpj(empresa)
+                            # Endereço pode não vir na listagem; tentar montar com o que houver
+                            endereco = Endereco(
+                                logradouro=item.get('logradouro') or '',
+                                numero=item.get('numero') or '',
+                                bairro=item.get('bairro') or '',
+                                cidade=item.get('municipio') or '',
+                                uf=item.get('uf') or '',
+                                cep=item.get('cep') or ''
+                            )
 
-                    # Camada 1: Google Places (website/telefone oficial)
-                    if self._places.enabled:
-                        p = self._places.enrich(empresa.razao_social or empresa.nome_fantasia or "", empresa.endereco.cidade if empresa.endereco else None, empresa.endereco.uf if empresa.endereco else None)
-                        if p.get("website"):
-                            setattr(empresa, "website", p["website"])  # atributo dinâmico para export
-                        if p.get("phone") and not empresa.telefone:
-                            empresa.telefone = p["phone"]
-                        if p:
-                            empresa.fonte = f"{empresa.fonte}; Places"
+                            # CNAE principal
+                            cnae_codigo = item.get('cnae_principal') or item.get('cnae')
+                            cnae_desc = item.get('cnae_principal_descricao', '')
+                            cnae_obj = CNAE(
+                                codigo=cnae_codigo,
+                                descricao=cnae_desc,
+                                principal=True
+                            ) if cnae_codigo else None
 
-                    # Camada 1: Validação de telefone
-                    if self._phone_validator.enabled and empresa.telefone:
-                        pv = self._phone_validator.validate(empresa.telefone)
-                        if pv.get("telefone_validado"):
-                            setattr(empresa, "telefone_validado", pv["telefone_validado"])  # para export
-                        if pv.get("validacao_telefone"):
-                            setattr(empresa, "validacao_telefone", pv["validacao_telefone"])  # para export
+                            # Datas
+                            data_abertura = None
+                            for key in ['data_abertura', 'data_inicio_atividade']:
+                                if item.get(key):
+                                    try:
+                                        data_abertura = datetime.strptime(item.get(key), '%Y-%m-%d')
+                                        break
+                                    except Exception:
+                                        pass
 
-                    # Camada 2: Validação de e-mail (opcional)
-                    if self._email_validator.enabled and empresa.email:
-                        ev = self._email_validator.validate(empresa.email)
-                        if ev.get("email_validacao"):
-                            setattr(empresa, "email_validacao", ev["email_validacao"])  # para export
-                        if ev.get("email_sugestao"):
-                            setattr(empresa, "email_sugestao", ev["email_sugestao"])  # para export
+                            # Contatos
+                            telefone = item.get('telefone') or item.get('ddd_telefone_1') or ''
+                            email = item.get('email') or ''
 
-                    # Descoberta de domínio quando não houver website
-                    if self._domain_discovery.enabled and not getattr(empresa, "website", None):
-                        comp_name = empresa.razao_social or empresa.nome_fantasia or ""
-                        dd = self._domain_discovery.discover(comp_name, empresa.endereco.cidade if empresa.endereco else None, empresa.endereco.uf if empresa.endereco else None)
-                        if isinstance(dd, dict) and dd.get("domain") and dd.get("confidence", 0) >= 0.5:
-                            setattr(empresa, "website", f"https://{dd['domain']}")
-                            setattr(empresa, "domain_confidence", dd.get("confidence"))
-                            setattr(empresa, "domain_source", dd.get("source"))
-                            empresa.fonte = f"{empresa.fonte}; DomainDiscovery"
+                            cnpj_limpo = (item.get('cnpj') or '').replace('.', '').replace('/', '').replace('-', '')
 
-                    # Camada 2: Company enrichment por domínio (opcional)
-                    if self._company_enrich.enabled:
-                        website = getattr(empresa, "website", "") or ""
-                        domain = ""
-                        if website:
-                            try:
-                                domain = website.replace("https://", "").replace("http://", "").split("/")[0]
-                            except Exception:
+                            empresa = Empresa(
+                                cnpj=cnpj_limpo,
+                                razao_social=item.get('razao_social', ''),
+                                nome_fantasia=item.get('nome_fantasia'),
+                                situacao_cadastral=situacao_cadastral,
+                                data_abertura=data_abertura,
+                                porte=porte,
+                                natureza_juridica=(item.get('natureza_juridica') or ''),
+                                endereco=endereco,
+                                cnae_principal=cnae_obj,
+                                telefone=telefone,
+                                email=email,
+                                fonte="Nuvem Fiscal"
+                            )
+
+                            # Enriquecer com detalhe se endereço veio vazio
+                            if not (empresa.endereco and (empresa.endereco.logradouro or empresa.endereco.cidade or empresa.endereco.cep)):
+                                detalhe = self._consultar_cnpj_individual_nuvem_fiscal(token, cnpj_limpo)
+                                if detalhe and detalhe.endereco:
+                                    empresa.endereco = detalhe.endereco
+                                if detalhe and detalhe.cnae_principal and not empresa.cnae_principal:
+                                    empresa.cnae_principal = detalhe.cnae_principal
+                                if detalhe and not empresa.email:
+                                    empresa.email = detalhe.email
+                                if detalhe and not empresa.telefone:
+                                    empresa.telefone = detalhe.telefone
+
+                            # Fallback extra: tentar BrasilAPI para completar endereço
+                            if not (empresa.endereco and (empresa.endereco.logradouro or empresa.endereco.cidade or empresa.endereco.cep)):
+                                endereco_fb, email_fb, fone_fb = self._consultar_cnpj_brasilapi(cnpj_limpo)
+                                if endereco_fb:
+                                    empresa.endereco = endereco_fb
+                                if (not empresa.email) and email_fb:
+                                    empresa.email = email_fb
+                                if (not empresa.telefone) and fone_fb:
+                                    empresa.telefone = fone_fb
+
+                            # Enriquecimento opcional via RapidAPI (duplo check)
+                            if self._rapid_enrich:
+                                empresa = self._rapid_enrich.enrich_empresa_by_cnpj(empresa)
+
+                            # Camada 1: Google Places (website/telefone oficial)
+                            if self._places.enabled:
+                                p = self._places.enrich(empresa.razao_social or empresa.nome_fantasia or "", empresa.endereco.cidade if empresa.endereco else None, empresa.endereco.uf if empresa.endereco else None)
+                                if p.get("website"):
+                                    setattr(empresa, "website", p["website"])  # atributo dinâmico para export
+                                if p.get("phone") and not empresa.telefone:
+                                    empresa.telefone = p["phone"]
+                                if p:
+                                    empresa.fonte = f"{empresa.fonte}; Places"
+
+                            # Camada 1: Validação de telefone
+                            if self._phone_validator.enabled and empresa.telefone:
+                                pv = self._phone_validator.validate(empresa.telefone)
+                                if pv.get("telefone_validado"):
+                                    setattr(empresa, "telefone_validado", pv["telefone_validado"])  # para export
+                                if pv.get("validacao_telefone"):
+                                    setattr(empresa, "validacao_telefone", pv["validacao_telefone"])  # para export
+
+                            # Camada 2: Validação de e-mail (opcional)
+                            if self._email_validator.enabled and empresa.email:
+                                ev = self._email_validator.validate(empresa.email)
+                                if ev.get("email_validacao"):
+                                    setattr(empresa, "email_validacao", ev["email_validacao"])  # para export
+                                if ev.get("email_sugestao"):
+                                    setattr(empresa, "email_sugestao", ev["email_sugestao"])  # para export
+
+                            # Descoberta de domínio quando não houver website
+                            if self._domain_discovery.enabled and not getattr(empresa, "website", None):
+                                comp_name = empresa.razao_social or empresa.nome_fantasia or ""
+                                dd = self._domain_discovery.discover(comp_name, empresa.endereco.cidade if empresa.endereco else None, empresa.endereco.uf if empresa.endereco else None)
+                                if isinstance(dd, dict) and dd.get("domain") and dd.get("confidence", 0) >= 0.5:
+                                    setattr(empresa, "website", f"https://{dd['domain']}")
+                                    setattr(empresa, "domain_confidence", dd.get("confidence"))
+                                    setattr(empresa, "domain_source", dd.get("source"))
+                                    empresa.fonte = f"{empresa.fonte}; DomainDiscovery"
+
+                            # Camada 2: Company enrichment por domínio (opcional)
+                            if self._company_enrich.enabled:
+                                website = getattr(empresa, "website", "") or ""
                                 domain = ""
-                        if domain:
-                            ce = self._company_enrich.enrich(domain)
-                            for k, v in ce.items():
-                                setattr(empresa, k, v)
+                                if website:
+                                    try:
+                                        domain = website.replace("https://", "").replace("http://", "").split("/")[0]
+                                    except Exception:
+                                        domain = ""
+                                if domain:
+                                    ce = self._company_enrich.enrich(domain)
+                                    for k, v in ce.items():
+                                        setattr(empresa, k, v)
 
-                    # Email pattern via Hunter
-                    website = getattr(empresa, "website", "") or ""
-                    domain = ""
-                    if website:
-                        try:
-                            domain = website.replace("https://", "").replace("http://", "").split("/")[0]
-                        except Exception:
+                            # Email pattern via Hunter
+                            website = getattr(empresa, "website", "") or ""
                             domain = ""
-                    if self._email_pattern.enabled and domain:
-                        ep = self._email_pattern.enrich(domain)
-                        for k, v in ep.items():
-                            setattr(empresa, k, v)
+                            if website:
+                                try:
+                                    domain = website.replace("https://", "").replace("http://", "").split("/")[0]
+                                except Exception:
+                                    domain = ""
+                            if self._email_pattern.enabled and domain:
+                                ep = self._email_pattern.enrich(domain)
+                                for k, v in ep.items():
+                                    setattr(empresa, k, v)
 
-                    # Quality gates (strict mode)
-                    if self.settings.STRICT_MODE:
-                        # Require active status and address basics
-                        if (empresa.situacao_cadastral or '').upper() != 'ATIVA':
-                            continue
-                        if not (empresa.endereco and empresa.endereco.cidade and empresa.endereco.uf and empresa.endereco.cep):
-                            continue
-                        # Require valid contact (phone or email) if enabled
-                        if self.settings.REQUIRE_VALID_CONTACT:
-                            valid_email = (getattr(empresa, 'email_validacao', '') in ['deliverable', 'válido'])
-                            valid_phone = (getattr(empresa, 'validacao_telefone', '') == 'válido')
-                            if not (valid_email or valid_phone):
-                                continue
-                        # Require email domain match if enabled
-                        if self.settings.REQUIRE_DOMAIN_MATCH and empresa.email and getattr(empresa, 'website', None):
-                            try:
-                                mail_dom = empresa.email.split('@')[-1].lower()
-                                site_dom = empresa.website.replace('https://', '').replace('http://', '').split('/')[0].lower()
-                                if mail_dom not in site_dom and site_dom not in mail_dom:
+                            # Quality gates (strict mode)
+                            if self.settings.STRICT_MODE:
+                                # Require active status and address basics
+                                if (empresa.situacao_cadastral or '').upper() != 'ATIVA':
                                     continue
-                            except Exception:
-                                pass
-                        # Domain confidence gate
-                        if getattr(empresa, 'domain_confidence', None) is not None and empresa.domain_confidence < self.settings.MIN_CONFIDENCE_DOMAIN:
-                            # If domain_confidence exists but is below min, drop website
-                            setattr(empresa, 'website', '')
-                    empresas.append(empresa)
+                                if not (empresa.endereco and empresa.endereco.cidade and empresa.endereco.uf and empresa.endereco.cep):
+                                    continue
+                                # Require valid contact (phone or email) if enabled
+                                if self.settings.REQUIRE_VALID_CONTACT:
+                                    valid_email = (getattr(empresa, 'email_validacao', '') in ['deliverable', 'válido'])
+                                    valid_phone = (getattr(empresa, 'validacao_telefone', '') == 'válido')
+                                    if not (valid_email or valid_phone):
+                                        continue
+                                # Require email domain match if enabled
+                                if self.settings.REQUIRE_DOMAIN_MATCH and empresa.email and getattr(empresa, 'website', None):
+                                    try:
+                                        mail_dom = empresa.email.split('@')[-1].lower()
+                                        site_dom = empresa.website.replace('https://', '').replace('http://', '').split('/')[0].lower()
+                                        if mail_dom not in site_dom and site_dom not in mail_dom:
+                                            continue
+                                    except Exception:
+                                        pass
+                                # Domain confidence gate
+                                if getattr(empresa, 'domain_confidence', None) is not None and empresa.domain_confidence < self.settings.MIN_CONFIDENCE_DOMAIN:
+                                    # If domain_confidence exists but is below min, drop website
+                                    setattr(empresa, 'website', '')
+                            empresas.append(empresa)
 
-                return empresas
-                
-            else:
-                logger.error(f"Erro na busca: {response.status_code} - {response.text}")
-                return []
-                
+                        # Se trouxe menos do que o page_size, provavelmente acabou
+                        if len(items) < params.get('$top', page_size):
+                            break
+                        skip += params.get('$top', page_size)
+
+            return empresas
+
         except Exception as e:
             logger.error(f"Erro na busca Nuvem Fiscal: {e}")
             return []
